@@ -168,3 +168,5 @@ export async function POST(request: Request) {
   console.error("DEBUG_AUTH: admin granted", { matchedRow: rows[0] })
   return reply({ ok: true })
 }
+
+// Sync production deployment
