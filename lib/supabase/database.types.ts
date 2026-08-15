@@ -242,6 +242,135 @@ export interface Database {
         }
         Relationships: []
       }
+      article_categories: {
+        Row: {
+          id: string
+          name: string
+          seo_title: string | null
+          seo_keywords: string | null
+          seo_description: string | null
+          head_code: string | null
+          slug: string | null
+          image_url: string | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          seo_title?: string | null
+          seo_keywords?: string | null
+          seo_description?: string | null
+          head_code?: string | null
+          slug?: string | null
+          image_url?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          seo_title?: string | null
+          seo_keywords?: string | null
+          seo_description?: string | null
+          head_code?: string | null
+          slug?: string | null
+          image_url?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      articles: {
+        Row: {
+          id: string
+          category_id: string | null
+          title: string
+          seo_title: string | null
+          seo_keywords: string | null
+          seo_description: string | null
+          head_code: string | null
+          slug: string | null
+          video_url: string | null
+          cover_image_url: string | null
+          publish_date: string
+          start_date: string | null
+          end_date: string | null
+          show_on_homepage: boolean
+          is_pinned: boolean
+          external_url: string | null
+          content_html: string | null
+          memo: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          category_id?: string | null
+          title: string
+          seo_title?: string | null
+          seo_keywords?: string | null
+          seo_description?: string | null
+          head_code?: string | null
+          slug?: string | null
+          video_url?: string | null
+          cover_image_url?: string | null
+          publish_date?: string
+          start_date?: string | null
+          end_date?: string | null
+          show_on_homepage?: boolean
+          is_pinned?: boolean
+          external_url?: string | null
+          content_html?: string | null
+          memo?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          category_id?: string | null
+          title?: string
+          seo_title?: string | null
+          seo_keywords?: string | null
+          seo_description?: string | null
+          head_code?: string | null
+          slug?: string | null
+          video_url?: string | null
+          cover_image_url?: string | null
+          publish_date?: string
+          start_date?: string | null
+          end_date?: string | null
+          show_on_homepage?: boolean
+          is_pinned?: boolean
+          external_url?: string | null
+          content_html?: string | null
+          memo?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      article_related_articles: {
+        Row: {
+          article_id: string
+          related_article_id: string
+          sort_order: number
+        }
+        Insert: {
+          article_id: string
+          related_article_id: string
+          sort_order?: number
+        }
+        Update: {
+          article_id?: string
+          related_article_id?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
