@@ -8,42 +8,11 @@
 -- Run this in the v0 Scripts panel (or the Supabase SQL editor) against the
 -- connected project. NOTE: do not execute as part of this step — creation only.
 --
--- Depends on helpers created by earlier scripts (002): public.is_admin() and
--- public.set_updated_at(). They are re-created here defensively so this file
--- is self-contained and order-independent.
+-- Depends on helpers created by earlier scripts (002), which already exist and
+-- are in active use by Admin Authentication: public.is_admin() and
+-- public.set_updated_at(). This migration REFERENCES them but MUST NOT recreate
+-- or modify them, so existing auth behavior is left completely untouched.
 -- ============================================================================
-
--- ---------------------------------------------------------------------------
--- 0. Shared helpers (idempotent; identical to earlier scripts)
--- ---------------------------------------------------------------------------
-create or replace function public.is_admin()
-returns boolean
-language sql
-security definer
-stable
-set search_path = ''
-as $$
-  select exists (
-    select 1
-    from public.admin_users a
-    where a.user_id = auth.uid()
-       or lower(a.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-  );
-$$;
-
-revoke all on function public.is_admin() from public;
-grant execute on function public.is_admin() to authenticated, anon;
-
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-set search_path = ''
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
 
 -- ---------------------------------------------------------------------------
 -- 1. case_categories  (實績案例分類)
@@ -62,7 +31,7 @@ create table if not exists public.case_categories (
   updated_at      timestamptz not null default now()
 );
 
-create index if not exists case_categories_slug_idx       on public.case_categories (slug);
+-- Note: the UNIQUE constraint on slug already provides its index.
 create index if not exists case_categories_sort_order_idx on public.case_categories (sort_order);
 
 -- ---------------------------------------------------------------------------
@@ -101,9 +70,9 @@ create table if not exists public.case_items (
   status                    text not null default 'display'
                               check (status in ('sale', 'display', 'offline')),
 
-  -- Content
+  -- Content ("商品詳細內容" is legacy-required; description stays optional)
   description_html          text,
-  detail_html              text,
+  detail_html               text not null,
 
   -- Legacy free-text note
   note                      text,
@@ -133,7 +102,7 @@ create table if not exists public.case_items (
 );
 
 create index if not exists case_items_category_id_idx   on public.case_items (category_id);
-create index if not exists case_items_slug_idx          on public.case_items (slug);
+-- Note: the UNIQUE constraint on slug already provides its index.
 create index if not exists case_items_sort_order_idx    on public.case_items (sort_order);
 create index if not exists case_items_status_idx        on public.case_items (status);
 create index if not exists case_items_publish_start_idx on public.case_items (publish_start);
@@ -255,10 +224,24 @@ drop policy if exists "case_items_admin_delete" on public.case_items;
 create policy "case_items_admin_delete" on public.case_items
   for delete to authenticated using (public.is_admin());
 
--- --- case_images: public read, admin write ---
+-- --- case_images: admins read all; public reads only images whose parent
+--     case is publicly visible (mirrors case_items_select_public) ---
+drop policy if exists "case_images_select_admin" on public.case_images;
+create policy "case_images_select_admin" on public.case_images
+  for select to authenticated using (public.is_admin());
+
 drop policy if exists "case_images_select_public" on public.case_images;
 create policy "case_images_select_public" on public.case_images
-  for select using (true);
+  for select using (
+    exists (
+      select 1
+      from public.case_items ci
+      where ci.id = case_images.case_id
+        and ci.status <> 'offline'
+        and (ci.publish_start is null or ci.publish_start <= now())
+        and (ci.publish_end   is null or ci.publish_end   >= now())
+    )
+  );
 
 drop policy if exists "case_images_admin_insert" on public.case_images;
 create policy "case_images_admin_insert" on public.case_images
@@ -272,10 +255,32 @@ drop policy if exists "case_images_admin_delete" on public.case_images;
 create policy "case_images_admin_delete" on public.case_images
   for delete to authenticated using (public.is_admin());
 
--- --- case_related_cases: public read, admin write ---
+-- --- case_related_cases: admins read all; public reads a relation only when
+--     BOTH the owning and the related case are publicly visible ---
+drop policy if exists "case_related_select_admin" on public.case_related_cases;
+create policy "case_related_select_admin" on public.case_related_cases
+  for select to authenticated using (public.is_admin());
+
 drop policy if exists "case_related_select_public" on public.case_related_cases;
 create policy "case_related_select_public" on public.case_related_cases
-  for select using (true);
+  for select using (
+    exists (
+      select 1
+      from public.case_items ci
+      where ci.id = case_related_cases.case_id
+        and ci.status <> 'offline'
+        and (ci.publish_start is null or ci.publish_start <= now())
+        and (ci.publish_end   is null or ci.publish_end   >= now())
+    )
+    and exists (
+      select 1
+      from public.case_items cr
+      where cr.id = case_related_cases.related_case_id
+        and cr.status <> 'offline'
+        and (cr.publish_start is null or cr.publish_start <= now())
+        and (cr.publish_end   is null or cr.publish_end   >= now())
+    )
+  );
 
 drop policy if exists "case_related_admin_insert" on public.case_related_cases;
 create policy "case_related_admin_insert" on public.case_related_cases
