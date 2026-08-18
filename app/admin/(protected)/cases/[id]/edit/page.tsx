@@ -1,0 +1,84 @@
+import Link from "next/link"
+import { notFound } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
+
+import { createClient } from "@/lib/supabase/server"
+import { requireAdmin } from "@/lib/admin/auth"
+import { CaseForm, type CategoryOption, type CaseValues } from "../../case-form"
+
+export const dynamic = "force-dynamic"
+
+export default async function EditCasePage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  await requireAdmin()
+  const { id } = await params
+  const supabase = await createClient()
+
+  const { data: caseItem, error } = await supabase
+    .from("case_items")
+    .select("*")
+    .eq("id", id)
+    .single()
+
+  if (error || !caseItem) {
+    notFound()
+  }
+
+  const { data: categories } = await supabase
+    .from("case_categories")
+    .select("id, name")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  const options: CategoryOption[] = (categories ?? []).map((c) => ({ id: c.id, name: c.name }))
+
+  const values: CaseValues = {
+    id: caseItem.id,
+    category_id: caseItem.category_id,
+    name: caseItem.name,
+    short_description: caseItem.short_description,
+    seo_title: caseItem.seo_title,
+    seo_keywords: caseItem.seo_keywords,
+    seo_description: caseItem.seo_description,
+    head_code: caseItem.head_code,
+    slug: caseItem.slug,
+    price: caseItem.price,
+    original_price: caseItem.original_price,
+    is_home: caseItem.is_home,
+    is_new: caseItem.is_new,
+    is_hot: caseItem.is_hot,
+    is_recommended: caseItem.is_recommended,
+    publish_start: caseItem.publish_start,
+    publish_end: caseItem.publish_end,
+    status: caseItem.status,
+    description_html: caseItem.description_html,
+    detail_html: caseItem.detail_html,
+    note: caseItem.note,
+    specification_type: caseItem.specification_type,
+    specification_description: caseItem.specification_description,
+    case_code: caseItem.case_code,
+    stock_quantity: caseItem.stock_quantity,
+    safety_stock: caseItem.safety_stock,
+    shipping_rule: caseItem.shipping_rule,
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <Link
+          href="/admin/cases"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          返回案例管理
+        </Link>
+        <h1 className="font-heading text-2xl font-bold text-foreground">編輯案例</h1>
+      </div>
+
+      <CaseForm mode="edit" categories={options} caseItem={values} />
+    </div>
+  )
+}
