@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils"
 
 /**
  * Sub-navigation for the category section: 分類管理 | 分類排序.
- * (分類排序 remains a placeholder route implemented in a later step.)
  */
 export function CategoryTabs({ active }: { active: "manage" | "sort" }) {
   const tabs = [
