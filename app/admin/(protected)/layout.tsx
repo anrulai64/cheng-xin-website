@@ -2,6 +2,7 @@ import Link from "next/link"
 import { requireAdmin } from "@/lib/admin/auth"
 import { signOutAction } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { AdminSidebarNav } from "./admin-nav"
 
 export default async function ProtectedAdminLayout({
   children,
@@ -14,7 +15,7 @@ export default async function ProtectedAdminLayout({
   return (
     <div className="min-h-screen">
       <header className="border-b bg-card">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="flex h-14 items-center justify-between gap-4 px-4">
           <Link href="/admin" className="font-heading text-base font-bold">
             誠昕驗屋 <span className="text-muted-foreground">後台</span>
           </Link>
@@ -30,7 +31,12 @@ export default async function ProtectedAdminLayout({
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-8">{children}</div>
+      <div className="flex flex-col md:flex-row">
+        <AdminSidebarNav />
+        <main className="min-w-0 flex-1 px-4 py-8 md:px-8">
+          <div className="mx-auto max-w-5xl">{children}</div>
+        </main>
+      </div>
     </div>
   )
 }
