@@ -3,14 +3,218 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
+import { isValidSlug } from "@/lib/admin/cases/slug"
 
 const BUCKET = "case-images"
 const LIST_PATH = "/admin/cases"
+
+const VALID_STATUSES = ["sale", "display", "offline"] as const
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string }
 export type BulkResult =
   | { ok: true; deleted: number }
   | { ok: false; error: string; deleted?: number }
+
+/**
+ * Parse and validate the shared case_items form payload (used by both create
+ * and update). Returns either a normalized column object ready for insert/
+ * update, or a Traditional-Chinese error message. Never touches sort_order,
+ * created_at, or id — those are managed elsewhere / by the DB.
+ */
+type CasePayload = {
+  category_id: string
+  name: string
+  short_description: string | null
+  seo_title: string | null
+  seo_keywords: string | null
+  seo_description: string | null
+  head_code: string | null
+  slug: string | null
+  price: number | null
+  original_price: number | null
+  is_home: boolean
+  is_new: boolean
+  is_hot: boolean
+  is_recommended: boolean
+  publish_start: string | null
+  publish_end: string | null
+  status: string
+  description_html: string | null
+  detail_html: string
+  note: string | null
+  specification_type: string
+  specification_description: string | null
+  case_code: string
+  stock_quantity: number | null
+  safety_stock: number | null
+  shipping_rule: string | null
+}
+
+function str(form: FormData, key: string): string {
+  const v = form.get(key)
+  return typeof v === "string" ? v.trim() : ""
+}
+
+function nullableStr(form: FormData, key: string): string | null {
+  const v = str(form, key)
+  return v === "" ? null : v
+}
+
+/** Parse an optional decimal (price). Returns undefined on invalid input. */
+function parseOptionalNumber(raw: string): number | null | undefined {
+  if (raw === "") return null
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+/** Parse an optional non-negative integer (stock). undefined on invalid input. */
+function parseOptionalInt(raw: string): number | null | undefined {
+  if (raw === "") return null
+  if (!/^\d+$/.test(raw)) return undefined
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: false; error: string } {
+  const category_id = str(form, "category_id")
+  const name = str(form, "name")
+  const detail_html = str(form, "detail_html")
+  const specification_type = str(form, "specification_type")
+  const case_code = str(form, "case_code")
+
+  if (!category_id) return { ok: false, error: "請選擇分類。" }
+  if (!name) return { ok: false, error: "請輸入案例名稱。" }
+  if (!specification_type) return { ok: false, error: "請輸入規格種類。" }
+  if (!case_code) return { ok: false, error: "請輸入案例編號。" }
+  if (!detail_html) return { ok: false, error: "請輸入案例詳細內容。" }
+
+  const slug = nullableStr(form, "slug")
+  if (slug !== null && !isValidSlug(slug)) {
+    return { ok: false, error: "自訂網址格式不正確：僅能使用小寫英文、數字與連字號（-）。" }
+  }
+
+  const status = str(form, "status") || "display"
+  if (!VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) {
+    return { ok: false, error: "狀態值不正確。" }
+  }
+
+  const price = parseOptionalNumber(str(form, "price"))
+  if (price === undefined) return { ok: false, error: "案例售價必須為 0 以上的數字。" }
+  const original_price = parseOptionalNumber(str(form, "original_price"))
+  if (original_price === undefined) return { ok: false, error: "案例原價必須為 0 以上的數字。" }
+
+  const stock_quantity = parseOptionalInt(str(form, "stock_quantity"))
+  if (stock_quantity === undefined) return { ok: false, error: "案例庫存必須為 0 以上的整數。" }
+  const safety_stock = parseOptionalInt(str(form, "safety_stock"))
+  if (safety_stock === undefined) return { ok: false, error: "安全庫存必須為 0 以上的整數。" }
+
+  const publish_start = nullableStr(form, "publish_start")
+  const publish_end = nullableStr(form, "publish_end")
+  if (publish_start && publish_end && publish_end < publish_start) {
+    return { ok: false, error: "下架日期不可早於上架日期。" }
+  }
+
+  return {
+    ok: true,
+    data: {
+      category_id,
+      name,
+      short_description: nullableStr(form, "short_description"),
+      seo_title: nullableStr(form, "seo_title"),
+      seo_keywords: nullableStr(form, "seo_keywords"),
+      seo_description: nullableStr(form, "seo_description"),
+      head_code: nullableStr(form, "head_code"),
+      slug,
+      price,
+      original_price,
+      is_home: form.get("is_home") === "on" || form.get("is_home") === "true",
+      is_new: form.get("is_new") === "on" || form.get("is_new") === "true",
+      is_hot: form.get("is_hot") === "on" || form.get("is_hot") === "true",
+      is_recommended: form.get("is_recommended") === "on" || form.get("is_recommended") === "true",
+      publish_start,
+      publish_end,
+      status,
+      description_html: nullableStr(form, "description_html"),
+      detail_html,
+      note: nullableStr(form, "note"),
+      specification_type,
+      specification_description: nullableStr(form, "specification_description"),
+      case_code,
+      stock_quantity,
+      safety_stock,
+      shipping_rule: nullableStr(form, "shipping_rule"),
+    },
+  }
+}
+
+/** Map a unique-constraint violation to a friendly field-specific message. */
+function uniqueError(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes("slug")) return "自訂網址已被使用，請改用其他網址。"
+  if (m.includes("case_code")) return "案例編號已被使用，請改用其他編號。"
+  return "資料重複，請檢查自訂網址與案例編號是否已存在。"
+}
+
+/** Create a new case_items record. */
+export async function createCase(form: FormData): Promise<ActionResult> {
+  await requireAdmin()
+
+  const parsed = parseCaseForm(form)
+  if (!parsed.ok) return parsed
+
+  const supabase = await createClient()
+
+  // Append new records to the end of the current ordering.
+  const { data: maxRows } = await supabase
+    .from("case_items")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+  const nextSortOrder = maxRows && maxRows.length > 0 ? (maxRows[0].sort_order ?? 0) + 1 : 0
+
+  const { data: inserted, error } = await supabase
+    .from("case_items")
+    .insert({ ...parsed.data, sort_order: nextSortOrder })
+    .select("id")
+    .single()
+
+  if (error || !inserted) {
+    if (error?.code === "23505") return { ok: false, error: uniqueError(error.message) }
+    return { ok: false, error: `新增案例失敗：${error?.message ?? "未知錯誤"}` }
+  }
+
+  revalidatePath(LIST_PATH)
+  return { ok: true, id: inserted.id }
+}
+
+/**
+ * Update an existing case_items record. Never writes sort_order or created_at;
+ * updated_at is maintained automatically by the DB trigger.
+ */
+export async function updateCase(id: string, form: FormData): Promise<ActionResult> {
+  await requireAdmin()
+  if (typeof id !== "string" || id.trim() === "") {
+    return { ok: false, error: "案例識別碼無效。" }
+  }
+
+  const parsed = parseCaseForm(form)
+  if (!parsed.ok) return parsed
+
+  const supabase = await createClient()
+
+  const { error } = await supabase.from("case_items").update(parsed.data).eq("id", id)
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: uniqueError(error.message) }
+    return { ok: false, error: `更新案例失敗：${error.message}` }
+  }
+
+  revalidatePath(LIST_PATH)
+  revalidatePath(`/admin/cases/${id}/edit`)
+  return { ok: true, id }
+}
 
 /**
  * Best-effort cleanup of a single case's OWN image folder only. Strictly scoped
