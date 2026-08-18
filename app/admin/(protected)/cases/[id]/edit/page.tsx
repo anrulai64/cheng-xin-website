@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { CaseForm, type CategoryOption, type CaseValues } from "../../case-form"
+import { CaseImageManager, type CaseImageRow } from "./case-image-manager"
 
 export const dynamic = "force-dynamic"
 
@@ -34,6 +35,22 @@ export default async function EditCasePage({
     .order("created_at", { ascending: true })
 
   const options: CategoryOption[] = (categories ?? []).map((c) => ({ id: c.id, name: c.name }))
+
+  // Load only THIS case's images, ordered for display.
+  const { data: imageRows } = await supabase
+    .from("case_images")
+    .select("id, storage_path, public_url, alt_text, sort_order")
+    .eq("case_id", id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  const images: CaseImageRow[] = (imageRows ?? []).map((img) => ({
+    id: img.id,
+    storage_path: img.storage_path,
+    public_url: img.public_url,
+    alt_text: img.alt_text,
+    sort_order: img.sort_order,
+  }))
 
   const values: CaseValues = {
     id: caseItem.id,
@@ -79,6 +96,8 @@ export default async function EditCasePage({
       </div>
 
       <CaseForm mode="edit" categories={options} caseItem={values} />
+
+      <CaseImageManager caseId={caseItem.id} initialImages={images} />
     </div>
   )
 }
