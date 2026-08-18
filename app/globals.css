@@ -133,3 +133,29 @@
     scroll-behavior: smooth;
   }
 }
+
+/*
+ * Print support for the admin 案例管理 list ("列印本頁").
+ * Hides everything except the marked `.print-area` (so the admin sidebar,
+ * header, toolbar and pagination don't print), and removes in-table controls
+ * marked with `.print-hide` (checkboxes, 複製/修改/刪除). Scoped to print only.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none;
+  }
+  .print-hide {
+    display: none !important;
+  }
+}
