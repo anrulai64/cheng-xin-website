@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { isValidSlug } from "@/lib/admin/cases/slug"
+import { isHtmlContentEmpty } from "@/lib/admin/cases/html"
 
 const BUCKET = "case-images"
 const LIST_PATH = "/admin/cases"
@@ -88,7 +89,8 @@ function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: 
   if (!name) return { ok: false, error: "請輸入案例名稱。" }
   if (!specification_type) return { ok: false, error: "請輸入規格種類。" }
   if (!case_code) return { ok: false, error: "請輸入案例編號。" }
-  if (!detail_html) return { ok: false, error: "請輸入案例詳細內容。" }
+  // Reject visually-empty HTML (e.g. "<p></p>", "<br>") for the required field.
+  if (isHtmlContentEmpty(detail_html)) return { ok: false, error: "請輸入案例詳細內容。" }
 
   const slug = nullableStr(form, "slug")
   if (slug !== null && !isValidSlug(slug)) {

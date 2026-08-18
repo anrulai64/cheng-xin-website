@@ -13,7 +13,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { siteConfig } from "@/lib/site-data"
 import { slugify } from "@/lib/admin/cases/slug"
+import { isHtmlContentEmpty } from "@/lib/admin/cases/html"
 import { createCase, updateCase } from "./actions"
+import { RichTextEditor } from "./rich-text-editor"
 
 export type CategoryOption = { id: string; name: string }
 
@@ -169,6 +171,15 @@ export function CaseForm({
     e.preventDefault()
     setError(null)
     setSuccess(null)
+
+    // Enforce the legacy required rule using a real HTML-emptiness check so
+    // that visually-empty content (e.g. "<p></p>", "<br>") is rejected.
+    if (isHtmlContentEmpty(detailHtml)) {
+      setError("請輸入案例詳細內容。")
+      window.scrollTo({ top: 0, behavior: "smooth" })
+      return
+    }
+
     setLoading(true)
 
     const shippingRule = shippingMode === "custom" ? shippingCustom.trim() : shippingPreset
@@ -662,33 +673,32 @@ export function CaseForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="description_html">案例描述</Label>
-            <Textarea
-              id="description_html"
+            <Label>案例描述</Label>
+            <RichTextEditor
               value={descriptionHtml}
-              onChange={(e) => setDescriptionHtml(e.target.value)}
-              placeholder="可貼入 HTML（此欄位將於後續步驟升級為編輯器）"
-              rows={5}
-              className="font-mono text-xs"
+              onChange={setDescriptionHtml}
+              caseId={mode === "edit" ? caseItem?.id : undefined}
+              ariaLabel="案例描述"
+              minHeightClass="min-h-[10rem]"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="detail_html">
+            <Label>
               <Req />
               案例詳細內容
             </Label>
-            <Textarea
-              id="detail_html"
+            <RichTextEditor
               value={detailHtml}
-              onChange={(e) => setDetailHtml(e.target.value)}
-              placeholder="可貼入 HTML（此欄位將於後續步驟升級為編輯器）"
-              rows={10}
-              required
-              className="font-mono text-xs"
+              onChange={setDetailHtml}
+              caseId={mode === "edit" ? caseItem?.id : undefined}
+              ariaLabel="案例詳細內容"
+              minHeightClass="min-h-[20rem]"
             />
-            <p className="text-xs text-muted-foreground">
-              目前為暫時性 HTML 輸入，後續步驟會升級為所見即所得編輯器，不會清除既有內容。
-            </p>
+            {mode === "create" ? (
+              <p className="text-xs text-muted-foreground">
+                內文圖片上傳需在案例建立後才可使用；儲存後即可於「編輯」頁面插入圖片。
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="note">備註</Label>
