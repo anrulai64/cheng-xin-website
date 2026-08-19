@@ -49,6 +49,7 @@ type CasePayload = {
   stock_quantity: number | null
   safety_stock: number | null
   shipping_rule: string | null
+  location: string | null
 }
 
 function str(form: FormData, key: string): string {
@@ -147,6 +148,8 @@ function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: 
       stock_quantity,
       safety_stock,
       shipping_rule: nullableStr(form, "shipping_rule"),
+      // 案例地區: free text; trimmed, blank -> null (handled by nullableStr).
+      location: nullableStr(form, "location"),
     },
   }
 }
@@ -451,6 +454,7 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
       stock_quantity: original.stock_quantity,
       safety_stock: original.safety_stock,
       shipping_rule: original.shipping_rule,
+      location: original.location,
       sort_order: nextSortOrder,
     })
     .select("id")

@@ -48,6 +48,7 @@ export type CaseValues = {
   stock_quantity: number | null
   safety_stock: number | null
   shipping_rule: string | null
+  location: string | null
 }
 
 const LIST_PATH = "/admin/cases"
@@ -96,6 +97,7 @@ export function CaseForm({
   const [shortDescription, setShortDescription] = React.useState(
     caseItem?.short_description ?? "",
   )
+  const [location, setLocation] = React.useState(caseItem?.location ?? "")
 
   const [seoTitle, setSeoTitle] = React.useState(caseItem?.seo_title ?? "")
   const [seoKeywords, setSeoKeywords] = React.useState(caseItem?.seo_keywords ?? "")
@@ -201,6 +203,7 @@ export function CaseForm({
     fd.set("category_id", categoryId)
     fd.set("name", name)
     fd.set("short_description", shortDescription)
+    fd.set("location", location)
     fd.set("seo_title", seoTitle)
     fd.set("seo_keywords", seoKeywords)
     fd.set("seo_description", seoDescription)
@@ -339,6 +342,16 @@ export function CaseForm({
               onChange={(e) => setShortDescription(e.target.value)}
               placeholder="簡短描述（列表或摘要用）"
               rows={2}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="location">案例地區</Label>
+            <Input
+              id="location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="例如：桃園市桃園區"
             />
           </div>
         </CardContent>
