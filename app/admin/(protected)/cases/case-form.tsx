@@ -16,6 +16,7 @@ import { slugify } from "@/lib/admin/cases/slug"
 import { isHtmlContentEmpty } from "@/lib/admin/cases/html"
 import { createCase, updateCase } from "./actions"
 import { RichTextEditor } from "./rich-text-editor"
+import { RelatedCaseSelector, type CandidateCase } from "./related-case-selector"
 
 export type CategoryOption = { id: string; name: string }
 
@@ -76,10 +77,17 @@ export function CaseForm({
   mode,
   categories,
   caseItem,
+  relatedCandidates = [],
 }: {
   mode: "create" | "edit"
   categories: CategoryOption[]
   caseItem?: CaseValues
+  /**
+   * Candidate cases for the create-page 相關案例 picker. Only used in create
+   * mode; the edit page manages related cases through its own dedicated
+   * RelatedCaseManager and does not pass this prop.
+   */
+  relatedCandidates?: CandidateCase[]
 }) {
   const router = useRouter()
 
@@ -146,6 +154,11 @@ export function CaseForm({
   const [detailHtml, setDetailHtml] = React.useState(caseItem?.detail_html ?? "")
   const [note, setNote] = React.useState(caseItem?.note ?? "")
 
+  // Create-mode 相關案例 selection (directional current -> related). Held in
+  // local state and submitted together with the new case; never persisted on
+  // its own. Ignored entirely in edit mode.
+  const [relatedIds, setRelatedIds] = React.useState<string[]>([])
+
   const [copied, setCopied] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState<string | null>(null)
@@ -211,6 +224,12 @@ export function CaseForm({
     fd.set("description_html", descriptionHtml)
     fd.set("detail_html", detailHtml)
     fd.set("note", note)
+
+    // Carry selected related-case ids (create mode only). Order is preserved
+    // via getAll() on the server, which maps to sort_order 0,1,2...
+    if (mode === "create") {
+      for (const rid of relatedIds) fd.append("related_ids", rid)
+    }
 
     try {
       const result =
@@ -712,6 +731,25 @@ export function CaseForm({
           </div>
         </CardContent>
       </Card>
+
+      {mode === "create" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>相關案例</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              可在建立案例的同時挑選相關案例。此設定為單向：僅影響此案例所顯示的相關案例。
+              相關案例會與案例一併建立。
+            </p>
+            <RelatedCaseSelector
+              candidates={relatedCandidates}
+              selected={relatedIds}
+              onChange={setRelatedIds}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex items-center gap-3">
         <button
