@@ -411,7 +411,7 @@ export function CaseForm({
               placeholder="例如：taipei-inspection（可留空）"
             />
             <p className="text-xs text-muted-foreground">
-              僅能使用小寫英文、數字與連字號（-）。留空時會嘗試由名稱自動產生。
+              僅能使用小寫英文、數字與連字號（-）。若未填寫，系統將依序自動產生網址代碼，例如 01、02、03。
             </p>
             <div className="mt-1 flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-lg border bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
