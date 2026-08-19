@@ -118,6 +118,7 @@ export default async function EditCasePage({
     stock_quantity: caseItem.stock_quantity,
     safety_stock: caseItem.safety_stock,
     shipping_rule: caseItem.shipping_rule,
+    location: caseItem.location,
   }
 
   return (
