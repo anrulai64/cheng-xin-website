@@ -446,6 +446,7 @@ export interface Database {
           stock_quantity: number | null
           safety_stock: number | null
           shipping_rule: string | null
+          location: string | null
           sort_order: number
           created_at: string
           updated_at: string
@@ -478,6 +479,7 @@ export interface Database {
           stock_quantity?: number | null
           safety_stock?: number | null
           shipping_rule?: string | null
+          location?: string | null
           sort_order?: number
           created_at?: string
           updated_at?: string
@@ -510,6 +512,7 @@ export interface Database {
           stock_quantity?: number | null
           safety_stock?: number | null
           shipping_rule?: string | null
+          location?: string | null
           sort_order?: number
           created_at?: string
           updated_at?: string
