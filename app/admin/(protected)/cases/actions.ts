@@ -168,10 +168,12 @@ export async function createCase(form: FormData): Promise<ActionResult> {
 
   const supabase = await createClient()
 
-  // Append new records to the end of the current ordering.
+  // Append new records to the end of their OWN category ordering (case sorting
+  // is category-scoped), so a new case lands last within its category.
   const { data: maxRows } = await supabase
     .from("case_items")
     .select("sort_order")
+    .eq("category_id", parsed.data.category_id)
     .order("sort_order", { ascending: false })
     .limit(1)
   const nextSortOrder = maxRows && maxRows.length > 0 ? (maxRows[0].sort_order ?? 0) + 1 : 0
@@ -407,10 +409,12 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
     return { ok: false, error: `找不到要複製的案例：${fetchError?.message ?? "資料不存在"}` }
   }
 
-  // New rows go to the end of the list.
+  // New rows go to the end of their OWN category ordering (case sorting is
+  // category-scoped); the duplicate stays in the original's category.
   const { data: maxRows } = await supabase
     .from("case_items")
     .select("sort_order")
+    .eq("category_id", original.category_id)
     .order("sort_order", { ascending: false })
     .limit(1)
   const nextSortOrder = maxRows && maxRows.length > 0 ? (maxRows[0].sort_order ?? 0) + 1 : 0
