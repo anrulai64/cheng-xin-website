@@ -8,9 +8,12 @@ import { caseStudies } from "@/lib/site-data"
 import {
   getPublicCaseBySlug,
   getPublicCaseGallery,
+  getPublicRelatedCases,
   type PublicCaseDetail,
 } from "@/lib/case-studies/queries"
 import { SafeHtml } from "@/components/case-studies/safe-html"
+import { CaseGallery } from "@/components/case-studies/case-gallery"
+import { RelatedCaseCards } from "@/components/case-studies/related-case-cards"
 import { htmlToPlainExcerpt } from "@/lib/case-studies/sanitize"
 
 // Prebuild the six historical (legacy) slugs so their URLs keep SSG behavior.
@@ -140,7 +143,18 @@ export default async function CaseStudyPage({
 // ---------------------------------------------------------------------------
 
 async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
-  const cover = await getCoverImage(caseItem.id)
+  // The case id is resolved; gallery + related reads are independent, so run
+  // them in parallel. No client-side fetching, no caching in this STEP.
+  const [gallery, relatedCases] = await Promise.all([
+    getPublicCaseGallery(caseItem.id),
+    getPublicRelatedCases(caseItem.id),
+  ])
+
+  // First gallery image (sort_order 0) is the primary/cover; the rest form the
+  // additional gallery. No separate cover field.
+  const primaryImage = gallery[0] ?? null
+  const additionalImages = gallery.slice(1)
+
   const location = caseItem.location?.trim()
   const category = caseItem.category_name?.trim()
   const hasIntro = Boolean(caseItem.description_html && caseItem.description_html.trim())
@@ -176,13 +190,16 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
 
         <div className="mt-8 overflow-hidden rounded-2xl">
           <Image
-            src={cover?.public_url || "/placeholder.svg"}
-            alt={cover?.alt_text || caseItem.name}
+            src={primaryImage?.public_url || "/placeholder.svg"}
+            alt={primaryImage?.alt_text || caseItem.name}
             width={896}
             height={504}
             className="w-full object-cover"
           />
         </div>
+
+        {/* Additional gallery (only when 2+ images exist). */}
+        <CaseGallery images={additionalImages} caseName={caseItem.name} />
 
         {hasIntro && (
           <div className="mt-10 rounded-2xl border border-border bg-accent/40 p-6">
@@ -213,10 +230,11 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
       </article>
 
       {/*
-        Related cases ("更多實績案例") are intentionally hidden for CMS-driven
-        detail pages in this STEP to avoid mixing CMS data with the legacy
-        "first 3 others" list. The real case_related_cases UI is a later STEP.
+        Real CMS-configured related cases (directional + visibility-filtered by
+        getPublicRelatedCases). Hidden entirely when none are configured — never
+        falls back to arbitrary other cases.
       */}
+      <RelatedCaseCards cases={relatedCases} />
 
       <CtaSection />
     </>
