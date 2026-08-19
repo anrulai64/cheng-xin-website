@@ -8,12 +8,17 @@ import type { PublicCaseImage } from "@/lib/case-studies/queries"
 /**
  * Public Case Study gallery (client component, no external dependency).
  *
- * Receives the ADDITIONAL gallery images only (the caller renders the first
- * image as the primary/cover). Renders a responsive grid and a lightweight,
- * dependency-free lightbox built on a fixed overlay + Escape/click-to-close.
+ * Receives the FULL gallery array (order exactly as returned by
+ * getPublicCaseGallery: sort_order ASC, created_at ASC). Presents a large
+ * "current" image with a thumbnail navigation row, plus the existing
+ * dependency-free lightbox (click-to-enlarge, X/backdrop/Escape to close,
+ * ArrowLeft/ArrowRight to navigate, background scroll lock).
  *
- * ALT priority is resolved by the caller-provided `caseName` fallback:
- *   image.alt_text -> caseName
+ * Selected-image state lives here (single owner). The lightbox opens on the
+ * currently selected image and, when navigated, keeps the large image synced
+ * so closing leaves the last-viewed image selected.
+ *
+ * ALT priority: image.alt_text -> caseName. storage_path is never exposed.
  */
 export function CaseGallery({
   images,
@@ -22,19 +27,26 @@ export function CaseGallery({
   images: PublicCaseImage[]
   caseName: string
 }) {
-  const [activeIndex, setActiveIndex] = React.useState<number | null>(null)
+  const [selectedIndex, setSelectedIndex] = React.useState(0)
+  const [lightboxOpen, setLightboxOpen] = React.useState(false)
 
-  const close = React.useCallback(() => setActiveIndex(null), [])
+  const hasImages = images.length > 0
+  const hasThumbs = images.length > 1
+  // Guard against an out-of-range index if the set ever changes.
+  const safeIndex = hasImages ? Math.min(selectedIndex, images.length - 1) : 0
+  const current = hasImages ? images[safeIndex] : null
+
+  const close = React.useCallback(() => setLightboxOpen(false), [])
 
   React.useEffect(() => {
-    if (activeIndex === null) return
+    if (!lightboxOpen) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") close()
       if (e.key === "ArrowRight") {
-        setActiveIndex((i) => (i === null ? i : (i + 1) % images.length))
+        setSelectedIndex((i) => (i + 1) % images.length)
       }
       if (e.key === "ArrowLeft") {
-        setActiveIndex((i) => (i === null ? i : (i - 1 + images.length) % images.length))
+        setSelectedIndex((i) => (i - 1 + images.length) % images.length)
       }
     }
     document.addEventListener("keydown", onKey)
@@ -45,39 +57,84 @@ export function CaseGallery({
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [activeIndex, close, images.length])
+  }, [lightboxOpen, close, images.length])
 
-  if (images.length === 0) return null
-
-  const active = activeIndex === null ? null : images[activeIndex]
+  // Zero images: keep the existing placeholder behavior. No thumbnail row, no
+  // lightbox trigger, no empty container beyond the stable image area.
+  if (!hasImages) {
+    return (
+      <div className="mt-8 overflow-hidden rounded-2xl">
+        <Image
+          src="/placeholder.svg"
+          alt={caseName}
+          width={896}
+          height={504}
+          className="w-full object-cover"
+        />
+      </div>
+    )
+  }
 
   return (
-    <section aria-label="案例圖片集" className="mt-10">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-        {images.map((img, i) => (
-          <button
-            key={img.id}
-            type="button"
-            onClick={() => setActiveIndex(i)}
-            className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`放大檢視圖片：${img.alt_text || caseName}`}
-          >
-            <Image
-              src={img.public_url || "/placeholder.svg"}
-              alt={img.alt_text || caseName}
-              fill
-              sizes="(max-width: 768px) 50vw, 33vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          </button>
-        ))}
-      </div>
+    <section aria-label="案例圖片" className="mt-8">
+      {/* Large current image — clickable/keyboard-accessible lightbox trigger. */}
+      <button
+        type="button"
+        onClick={() => setLightboxOpen(true)}
+        aria-label={`放大檢視案例圖片：${current?.alt_text || caseName}`}
+        className="group relative block aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Image
+          src={current?.public_url || "/placeholder.svg"}
+          alt={current?.alt_text || caseName}
+          fill
+          priority
+          sizes="(max-width: 1024px) 100vw, 896px"
+          className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+        />
+      </button>
 
-      {active && (
+      {/* Thumbnail navigation — only when 2+ images. Horizontal scroll row. */}
+      {hasThumbs && (
+        <ul
+          className="mt-4 flex gap-3 overflow-x-auto pb-1"
+          role="list"
+          aria-label="案例圖片縮圖導覽"
+        >
+          {images.map((img, i) => {
+            const selected = i === safeIndex
+            return (
+              <li key={img.id} className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedIndex(i)}
+                  aria-label={`查看第 ${i + 1} 張案例圖片`}
+                  aria-current={selected ? "true" : undefined}
+                  className={`relative block aspect-[4/3] w-20 overflow-hidden rounded-lg border bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-24 ${
+                    selected
+                      ? "border-primary ring-2 ring-primary/40"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <Image
+                    src={img.public_url || "/placeholder.svg"}
+                    alt={img.alt_text || caseName}
+                    fill
+                    sizes="96px"
+                    className="object-cover"
+                  />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {lightboxOpen && current && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={active.alt_text || caseName}
+          aria-label={current.alt_text || caseName}
           onClick={close}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
         >
@@ -94,8 +151,8 @@ export function CaseGallery({
             onClick={(e) => e.stopPropagation()}
           >
             <Image
-              src={active.public_url || "/placeholder.svg"}
-              alt={active.alt_text || caseName}
+              src={current.public_url || "/placeholder.svg"}
+              alt={current.alt_text || caseName}
               width={1200}
               height={800}
               className="mx-auto max-h-[85vh] w-auto rounded-lg object-contain"
