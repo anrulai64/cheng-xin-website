@@ -150,11 +150,9 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
     getPublicRelatedCases(caseItem.id),
   ])
 
-  // First gallery image (sort_order 0) is the primary/cover; the rest form the
-  // additional gallery. No separate cover field.
-  const primaryImage = gallery[0] ?? null
-  const additionalImages = gallery.slice(1)
-
+  // The full gallery (order = getPublicCaseGallery: sort_order ASC,
+  // created_at ASC) is handed to CaseGallery, which owns selected-image state
+  // and renders the large image + thumbnails. gallery[0] is the default.
   const location = caseItem.location?.trim()
   const category = caseItem.category_name?.trim()
   const hasIntro = Boolean(caseItem.description_html && caseItem.description_html.trim())
@@ -188,18 +186,12 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           {caseItem.name}
         </h1>
 
-        <div className="mt-8 overflow-hidden rounded-2xl">
-          <Image
-            src={primaryImage?.public_url || "/placeholder.svg"}
-            alt={primaryImage?.alt_text || caseItem.name}
-            width={896}
-            height={504}
-            className="w-full object-cover"
-          />
-        </div>
-
-        {/* Additional gallery (only when 2+ images exist). */}
-        <CaseGallery images={additionalImages} caseName={caseItem.name} />
+        {/*
+          Full CMS gallery: large current image + thumbnail navigation +
+          lightbox. Owns selected-image state client-side. Zero images falls
+          back to a placeholder large image (handled inside CaseGallery).
+        */}
+        <CaseGallery images={gallery} caseName={caseItem.name} />
 
         {hasIntro && (
           <div className="mt-10 rounded-2xl border border-border bg-accent/40 p-6">
