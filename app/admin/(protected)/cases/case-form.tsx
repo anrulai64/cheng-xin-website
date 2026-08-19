@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { AlertCircle, Check, Copy, Loader2 } from "lucide-react"
+import { AlertCircle, Check, Copy, ImagePlus, Loader2, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -161,6 +161,49 @@ export function CaseForm({
   // its own. Ignored entirely in edit mode.
   const [relatedIds, setRelatedIds] = React.useState<string[]>([])
 
+  // Create-mode gallery selection: files stay LOCAL in the browser until the
+  // form is submitted (no Storage writes at selection time). Each item carries
+  // a stable id, the File, a local object-URL preview, and an optional ALT.
+  const [galleryItems, setGalleryItems] = React.useState<
+    { id: string; file: File; previewUrl: string; alt: string }[]
+  >([])
+
+  // Revoke every object URL on unmount to avoid browser memory leaks.
+  React.useEffect(() => {
+    return () => {
+      galleryItems.forEach((it) => URL.revokeObjectURL(it.previewUrl))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function handleGallerySelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files ? Array.from(e.target.files) : []
+    if (files.length === 0) return
+    setGalleryItems((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        alt: "",
+      })),
+    ])
+    // Allow re-selecting the same file(s) again after removal.
+    e.target.value = ""
+  }
+
+  function handleGalleryRemove(id: string) {
+    setGalleryItems((prev) => {
+      const target = prev.find((it) => it.id === id)
+      if (target) URL.revokeObjectURL(target.previewUrl)
+      return prev.filter((it) => it.id !== id)
+    })
+  }
+
+  function handleGalleryAltChange(id: string, alt: string) {
+    setGalleryItems((prev) => prev.map((it) => (it.id === id ? { ...it, alt } : it)))
+  }
+
   const [copied, setCopied] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState<string | null>(null)
@@ -232,6 +275,13 @@ export function CaseForm({
     // via getAll() on the server, which maps to sort_order 0,1,2...
     if (mode === "create") {
       for (const rid of relatedIds) fd.append("related_ids", rid)
+
+      // Gallery files + positional ALT (create mode only). case_images[i]
+      // pairs with case_images_alt_{i}; selection order becomes sort_order.
+      galleryItems.forEach((it, i) => {
+        fd.append("case_images", it.file, it.file.name)
+        fd.set(`case_images_alt_${i}`, it.alt)
+      })
     }
 
     try {
@@ -744,6 +794,95 @@ export function CaseForm({
           </div>
         </CardContent>
       </Card>
+
+      {mode === "create" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">案例圖片</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="case_images">選擇圖片</Label>
+              <input
+                id="case_images"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleGallerySelect}
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
+              />
+              <p className="text-xs text-muted-foreground">
+                可一次選擇多張圖片（單檔上限 8 MB，僅限圖片格式）。圖片會在按下「新增案例」時一併上傳。
+                {galleryItems.length > 0 ? "第一張圖片將作為案例封面。" : ""}
+              </p>
+            </div>
+
+            {galleryItems.length > 0 ? (
+              <ul className="flex flex-col gap-3" role="list">
+                {galleryItems.map((it, index) => (
+                  <li
+                    key={it.id}
+                    className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-start"
+                  >
+                    <div className="flex items-center gap-2 sm:flex-col">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground tabular-nums">
+                        {index + 1}
+                      </span>
+                      {index === 0 ? (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          封面
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="size-24 shrink-0 overflow-hidden rounded-md border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={it.previewUrl || "/placeholder.svg"}
+                        alt={`預覽：${it.file.name}`}
+                        className="size-full object-cover"
+                      />
+                    </div>
+
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <p className="truncate text-sm font-medium text-foreground" title={it.file.name}>
+                        {it.file.name}
+                      </p>
+                      <label htmlFor={`gallery-alt-${it.id}`} className="text-xs text-muted-foreground">
+                        ALT 文字（選填）
+                      </label>
+                      <Input
+                        id={`gallery-alt-${it.id}`}
+                        value={it.alt}
+                        onChange={(e) => handleGalleryAltChange(it.id, e.target.value)}
+                        placeholder="請輸入圖片替代文字"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGalleryRemove(it.id)}
+                      aria-label={`移除圖片 ${it.file.name}`}
+                      className={cn(
+                        buttonVariants({ variant: "ghost", size: "sm" }),
+                        "shrink-0 gap-1 text-destructive hover:text-destructive",
+                      )}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                      移除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                <ImagePlus className="size-4 shrink-0" aria-hidden />
+                尚未選擇圖片。案例圖片為選填，建立後亦可於「編輯」頁面新增。
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {mode === "create" ? (
         <Card>
