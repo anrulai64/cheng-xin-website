@@ -49,6 +49,10 @@ export type CaseValues = {
   safety_stock: number | null
   shipping_rule: string | null
   location: string | null
+  property_type: string | null
+  property_condition: string | null
+  floor_area: string | null
+  layout: string | null
 }
 
 const LIST_PATH = "/admin/cases"
@@ -98,6 +102,13 @@ export function CaseForm({
     caseItem?.short_description ?? "",
   )
   const [location, setLocation] = React.useState(caseItem?.location ?? "")
+  // 案例基本資料 (free-text): 類別 / 屋況 / 坪數 / 格局.
+  const [propertyType, setPropertyType] = React.useState(caseItem?.property_type ?? "")
+  const [propertyCondition, setPropertyCondition] = React.useState(
+    caseItem?.property_condition ?? "",
+  )
+  const [floorArea, setFloorArea] = React.useState(caseItem?.floor_area ?? "")
+  const [layout, setLayout] = React.useState(caseItem?.layout ?? "")
 
   const [seoTitle, setSeoTitle] = React.useState(caseItem?.seo_title ?? "")
   const [seoKeywords, setSeoKeywords] = React.useState(caseItem?.seo_keywords ?? "")
@@ -247,6 +258,10 @@ export function CaseForm({
     fd.set("name", name)
     fd.set("short_description", shortDescription)
     fd.set("location", location)
+    fd.set("property_type", propertyType)
+    fd.set("property_condition", propertyCondition)
+    fd.set("floor_area", floorArea)
+    fd.set("layout", layout)
     fd.set("seo_title", seoTitle)
     fd.set("seo_keywords", seoKeywords)
     fd.set("seo_description", seoDescription)
@@ -396,13 +411,53 @@ export function CaseForm({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="location">案例地區</Label>
+            <Label htmlFor="location">所在地</Label>
             <Input
               id="location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="例如：桃園市桃園區"
+              placeholder="例如：新北市林口區"
             />
+          </div>
+
+          {/* 案例基本資料：類別 / 屋況 / 坪數 / 格局（皆為選填自由文字） */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="property_type">類別</Label>
+              <Input
+                id="property_type"
+                value={propertyType}
+                onChange={(e) => setPropertyType(e.target.value)}
+                placeholder="例如：社區大樓"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="property_condition">屋況</Label>
+              <Input
+                id="property_condition"
+                value={propertyCondition}
+                onChange={(e) => setPropertyCondition(e.target.value)}
+                placeholder="例如：新成屋"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="floor_area">坪數</Label>
+              <Input
+                id="floor_area"
+                value={floorArea}
+                onChange={(e) => setFloorArea(e.target.value)}
+                placeholder="例如：14坪"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="layout">格局</Label>
+              <Input
+                id="layout"
+                value={layout}
+                onChange={(e) => setLayout(e.target.value)}
+                placeholder="例如：一廳一衛一臥一陽"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

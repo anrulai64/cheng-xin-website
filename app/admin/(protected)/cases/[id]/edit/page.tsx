@@ -119,6 +119,10 @@ export default async function EditCasePage({
     safety_stock: caseItem.safety_stock,
     shipping_rule: caseItem.shipping_rule,
     location: caseItem.location,
+    property_type: caseItem.property_type,
+    property_condition: caseItem.property_condition,
+    floor_area: caseItem.floor_area,
+    layout: caseItem.layout,
   }
 
   return (

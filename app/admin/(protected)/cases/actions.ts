@@ -55,6 +55,10 @@ type CasePayload = {
   safety_stock: number | null
   shipping_rule: string | null
   location: string | null
+  property_type: string | null
+  property_condition: string | null
+  floor_area: string | null
+  layout: string | null
 }
 
 function str(form: FormData, key: string): string {
@@ -153,8 +157,14 @@ function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: 
       stock_quantity,
       safety_stock,
       shipping_rule: nullableStr(form, "shipping_rule"),
-      // 案例地區: free text; trimmed, blank -> null (handled by nullableStr).
+      // 案例地區 / 所在地: free text; trimmed, blank -> null (nullableStr).
       location: nullableStr(form, "location"),
+      // 案例基本資料: flexible human-readable text fields; trimmed, blank -> null.
+      // Never parsed/normalized (floor_area stays "14坪", layout stays free-form).
+      property_type: nullableStr(form, "property_type"),
+      property_condition: nullableStr(form, "property_condition"),
+      floor_area: nullableStr(form, "floor_area"),
+      layout: nullableStr(form, "layout"),
     },
   }
 }
@@ -260,7 +270,7 @@ export async function createCase(form: FormData): Promise<ActionResult> {
     if (autoSlug && isSlugUniqueViolation(lastError)) {
       return { ok: false, error: "自動產生網址代碼時發生衝突，請再試一次。" }
     }
-    return { ok: false, error: `新增案例失敗：${lastError?.message ?? "未知錯誤"}` }
+    return { ok: false, error: `新增案例失敗���${lastError?.message ?? "未知錯誤"}` }
   }
 
   // ---- 相關案例: create directional relationships together with the case ----
@@ -636,6 +646,10 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
         safety_stock: original.safety_stock,
         shipping_rule: original.shipping_rule,
         location: original.location,
+        property_type: original.property_type,
+        property_condition: original.property_condition,
+        floor_area: original.floor_area,
+        layout: original.layout,
         sort_order: nextSortOrder,
       })
       .select("id")
