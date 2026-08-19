@@ -187,6 +187,67 @@ export async function createCase(form: FormData): Promise<ActionResult> {
     return { ok: false, error: `新增案例失敗：${error?.message ?? "未知錯誤"}` }
   }
 
+  // ---- 相關案例: create directional relationships together with the case ----
+  // Normalize submitted ids: strings only, trimmed, blanks dropped, de-duped,
+  // and self-reference removed (the CHECK constraint also enforces this).
+  const rawRelated = form.getAll("related_ids")
+  const desiredRelated = [
+    ...new Set(
+      rawRelated
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+        .map((v) => v.trim()),
+    ),
+  ].filter((rid) => rid !== inserted.id)
+
+  if (desiredRelated.length > 0) {
+    // Verify every submitted related id actually exists before inserting.
+    const { data: existing, error: existErr } = await supabase
+      .from("case_items")
+      .select("id")
+      .in("id", desiredRelated)
+
+    const existingIds = new Set((existing ?? []).map((r) => r.id))
+    const allValid = !existErr && desiredRelated.every((rid) => existingIds.has(rid))
+
+    let relError: string | null = null
+    if (existErr) {
+      relError = `無法驗證所選的相關案例：${existErr.message}`
+    } else if (!allValid) {
+      relError = "部分所選的相關案例已不存在，請重新整理後再試。"
+    } else {
+      // Preserve selected order as sort_order 0,1,2...
+      const rows = desiredRelated.map((related_case_id, i) => ({
+        case_id: inserted.id,
+        related_case_id,
+        sort_order: i,
+      }))
+      const { error: insErr } = await supabase
+        .from("case_related_cases")
+        .upsert(rows, { onConflict: "case_id,related_case_id", ignoreDuplicates: true })
+      if (insErr) relError = `建立相關案例時發生錯誤：${insErr.message}`
+    }
+
+    // Failure safety: the case row exists but relationships failed. Since this
+    // is a brand-new case (no gallery images yet), attempt to roll back by
+    // deleting the just-created case so the admin isn't left with a partial,
+    // silently-incomplete record.
+    if (relError) {
+      const { error: rollbackErr } = await supabase
+        .from("case_items")
+        .delete()
+        .eq("id", inserted.id)
+
+      revalidatePath(LIST_PATH)
+      if (rollbackErr) {
+        return {
+          ok: false,
+          error: `${relError} 另外，自動回復新增的案例也失敗，此案例可能已被建立但相關案例未完整儲存，請至案例管理檢查並手動處理。`,
+        }
+      }
+      return { ok: false, error: `${relError} 已取消本次新增，請修正後重新建立。` }
+    }
+  }
+
   revalidatePath(LIST_PATH)
   return { ok: true, id: inserted.id }
 }
