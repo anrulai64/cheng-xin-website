@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { CaseForm, type CategoryOption, type CaseValues } from "../../case-form"
 import { CaseImageManager, type CaseImageRow } from "./case-image-manager"
+import { RelatedCaseManager, type CandidateCase } from "./related-case-manager"
 
 export const dynamic = "force-dynamic"
 
@@ -51,6 +52,43 @@ export default async function EditCasePage({
     alt_text: img.alt_text,
     sort_order: img.sort_order,
   }))
+
+  // ---- 相關案例: candidate cases (exclude self) + current relationships ----
+  // Fetch only the lightweight fields needed for identification in the picker;
+  // never load description_html / detail_html.
+  const { data: candidateRows } = await supabase
+    .from("case_items")
+    .select("id, name, case_code, category_id, status")
+    .neq("id", id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  // Resolve category names via a scoped lookup (FK isn't in generated types).
+  const categoryNameById = new Map<string, string>(
+    (categories ?? []).map((c) => [c.id, c.name]),
+  )
+
+  const candidates: CandidateCase[] = (candidateRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    case_code: c.case_code,
+    category_name: c.category_id ? categoryNameById.get(c.category_id) ?? null : null,
+    status: c.status,
+  }))
+
+  const { data: relatedRows } = await supabase
+    .from("case_related_cases")
+    .select("related_case_id, sort_order, created_at")
+    .eq("case_id", id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  // Keep only relationships whose target still exists among candidates, so a
+  // stale row can never break the picker.
+  const candidateIdSet = new Set(candidates.map((c) => c.id))
+  const initialSelectedIds: string[] = (relatedRows ?? [])
+    .map((r) => r.related_case_id)
+    .filter((rid) => candidateIdSet.has(rid))
 
   const values: CaseValues = {
     id: caseItem.id,
@@ -98,6 +136,12 @@ export default async function EditCasePage({
       <CaseForm mode="edit" categories={options} caseItem={values} />
 
       <CaseImageManager caseId={caseItem.id} initialImages={images} />
+
+      <RelatedCaseManager
+        currentId={caseItem.id}
+        candidates={candidates}
+        initialSelectedIds={initialSelectedIds}
+      />
     </div>
   )
 }
