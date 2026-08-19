@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { isValidSlug, nextNumericSlug } from "@/lib/admin/cases/slug"
 import { isHtmlContentEmpty } from "@/lib/admin/cases/html"
+import {
+  CASE_IMAGE_BUCKET,
+  buildCaseImageStoragePath,
+  validateGalleryFiles,
+} from "@/lib/admin/cases/images"
 
 const BUCKET = "case-images"
 const LIST_PATH = "/admin/cases"
@@ -192,6 +197,19 @@ export async function createCase(form: FormData): Promise<ActionResult> {
   const parsed = parseCaseForm(form)
   if (!parsed.ok) return parsed
 
+  // --- Gallery files: collect + validate BEFORE creating the case row, so an
+  // invalid/oversized file never results in an orphaned case (STEP §7.3). ---
+  const galleryFiles = form
+    .getAll("case_images")
+    .filter((f): f is File => f instanceof File && f.size > 0)
+  // ALT[i] maps positionally to case_images[i]; missing -> "".
+  const galleryAlts = galleryFiles.map((_, i) => {
+    const v = form.get(`case_images_alt_${i}`)
+    return typeof v === "string" ? v.trim() : ""
+  })
+  const galleryValidation = validateGalleryFiles(galleryFiles)
+  if (!galleryValidation.ok) return { ok: false, error: galleryValidation.error }
+
   const supabase = await createClient()
 
   // Append new records to the end of their OWN category ordering (case sorting
@@ -303,6 +321,82 @@ export async function createCase(form: FormData): Promise<ActionResult> {
         }
       }
       return { ok: false, error: `${relError} 已取消本次新增，請修正後重新建立。` }
+    }
+  }
+
+  // ---- 案例圖片 (gallery): upload to Storage + insert case_images rows -------
+  // Only runs after the case row and related cases are in place, so paths use a
+  // real case id. Selected order becomes sort_order 0,1,2... (first image is the
+  // public cover). Any failure triggers strictly-scoped compensation: remove the
+  // objects uploaded during THIS attempt and delete the just-created case (its
+  // case_images/relationships fall away via ON DELETE CASCADE).
+  if (galleryFiles.length > 0) {
+    const uploadedPaths: string[] = []
+    let galleryError: string | null = null
+
+    for (let i = 0; i < galleryFiles.length; i++) {
+      const file = galleryFiles[i]
+      const path = buildCaseImageStoragePath(inserted.id, file.name)
+
+      const { error: uploadError } = await supabase.storage
+        .from(CASE_IMAGE_BUCKET)
+        .upload(path, file, { upsert: false, contentType: file.type || undefined })
+
+      if (uploadError) {
+        galleryError = `圖片「${file.name}」上傳失敗：${uploadError.message}`
+        break
+      }
+      uploadedPaths.push(path)
+
+      const { data: urlData } = supabase.storage.from(CASE_IMAGE_BUCKET).getPublicUrl(path)
+      const altText = galleryAlts[i] && galleryAlts[i] !== "" ? galleryAlts[i] : null
+
+      const { error: insertError } = await supabase.from("case_images").insert({
+        case_id: inserted.id,
+        storage_path: path,
+        public_url: urlData.publicUrl,
+        alt_text: altText,
+        sort_order: i,
+      })
+
+      if (insertError) {
+        galleryError = `圖片「${file.name}」資料寫入失敗：${insertError.message}`
+        break
+      }
+    }
+
+    if (galleryError) {
+      // Compensation strictly scoped to THIS create attempt:
+      // 1) remove only the objects uploaded just now (never other folders/cases)
+      // 2) delete the just-created case (cascades its own case_images + relations)
+      let cleanupWarning = ""
+      if (uploadedPaths.length > 0) {
+        const { error: removeErr } = await supabase.storage
+          .from(CASE_IMAGE_BUCKET)
+          .remove(uploadedPaths)
+        if (removeErr) {
+          cleanupWarning += ` 另外，已上傳的圖片檔案清除失敗（${removeErr.message}）。`
+        }
+      }
+      const { error: caseDeleteErr } = await supabase
+        .from("case_items")
+        .delete()
+        .eq("id", inserted.id)
+      if (caseDeleteErr) {
+        cleanupWarning += ` 另外，自動回復新增的案例也失敗（${caseDeleteErr.message}）。`
+      }
+
+      revalidatePath(LIST_PATH)
+      if (cleanupWarning) {
+        return {
+          ok: false,
+          error: `${galleryError}${cleanupWarning} 系統可能殘留不完整資料，請至案例管理檢查並手動處理。`,
+        }
+      }
+      return {
+        ok: false,
+        error: `${galleryError} 已取消本次新增（含已上傳的圖片），請修正後重新建立。`,
+      }
     }
   }
 

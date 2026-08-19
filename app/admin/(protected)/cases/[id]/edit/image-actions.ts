@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 
-const BUCKET = "case-images"
-const MAX_FILE_SIZE = 8 * 1024 * 1024 // 8 MB — matches the bucket's existing limit
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]
+// Bucket / limits / path strategy live in a shared, non-"use server" module so
+// the create-page flow (actions.ts) reuses EXACTLY the same values and logic.
+import {
+  CASE_IMAGE_ALLOWED_TYPES as ALLOWED_TYPES,
+  CASE_IMAGE_BUCKET as BUCKET,
+  CASE_IMAGE_MAX_FILE_SIZE as MAX_FILE_SIZE,
+  buildCaseImageStoragePath,
+} from "@/lib/admin/cases/images"
 
 export type ImageActionResult = { ok: true } | { ok: false; error: string }
 export type UploadResult = {
@@ -18,14 +23,6 @@ export type UploadResult = {
 
 function revalidateEdit(caseId: string) {
   revalidatePath(`/admin/cases/${caseId}/edit`)
-}
-
-/** Build a collision-resistant storage path under this case's own folder. */
-function buildStoragePath(caseId: string, originalName: string): string {
-  const rawExt = (originalName.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "")
-  const ext = rawExt || "bin"
-  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  return `case-items/${caseId}/${unique}.${ext}`
 }
 
 /**
@@ -86,7 +83,7 @@ export async function uploadCaseImages(caseId: string, formData: FormData): Prom
       continue
     }
 
-    const path = buildStoragePath(caseId, file.name)
+    const path = buildCaseImageStoragePath(caseId, file.name)
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
