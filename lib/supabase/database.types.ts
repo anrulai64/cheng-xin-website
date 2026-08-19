@@ -447,6 +447,10 @@ export interface Database {
           safety_stock: number | null
           shipping_rule: string | null
           location: string | null
+          property_type: string | null
+          property_condition: string | null
+          floor_area: string | null
+          layout: string | null
           sort_order: number
           created_at: string
           updated_at: string
@@ -480,6 +484,10 @@ export interface Database {
           safety_stock?: number | null
           shipping_rule?: string | null
           location?: string | null
+          property_type?: string | null
+          property_condition?: string | null
+          floor_area?: string | null
+          layout?: string | null
           sort_order?: number
           created_at?: string
           updated_at?: string
@@ -513,6 +521,10 @@ export interface Database {
           safety_stock?: number | null
           shipping_rule?: string | null
           location?: string | null
+          property_type?: string | null
+          property_condition?: string | null
+          floor_area?: string | null
+          layout?: string | null
           sort_order?: number
           created_at?: string
           updated_at?: string

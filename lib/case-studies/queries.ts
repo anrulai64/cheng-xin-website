@@ -67,6 +67,11 @@ export type PublicCaseDetail = {
   slug: string | null
   name: string
   location: string | null
+  /** 案例基本資料 (detail-only free-text). Not part of list cards. */
+  property_type: string | null
+  property_condition: string | null
+  floor_area: string | null
+  layout: string | null
   category_id: string
   category_name: string | null
   category_slug: string | null
@@ -285,7 +290,7 @@ export async function getPublicCaseBySlug(
     supabase
       .from("case_items")
       .select(
-        "id, slug, name, location, category_id, short_description, description_html, detail_html, seo_title, seo_description, seo_keywords, status, publish_start, publish_end",
+        "id, slug, name, location, property_type, property_condition, floor_area, layout, category_id, short_description, description_html, detail_html, seo_title, seo_description, seo_keywords, status, publish_start, publish_end",
       )
       .eq("slug", trimmed),
   ).maybeSingle()
@@ -308,6 +313,10 @@ export async function getPublicCaseBySlug(
     slug: data.slug,
     name: data.name,
     location: data.location,
+    property_type: data.property_type,
+    property_condition: data.property_condition,
+    floor_area: data.floor_area,
+    layout: data.layout,
     category_id: data.category_id,
     category_name: category?.name ?? null,
     category_slug: category?.slug ?? null,

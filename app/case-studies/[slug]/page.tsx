@@ -2,9 +2,9 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowLeft, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, AlertTriangle, CheckCircle2, ClipboardCheck, MessageCircle } from "lucide-react"
 import { Breadcrumbs, CtaSection } from "@/components/shared"
-import { caseStudies } from "@/lib/site-data"
+import { caseStudies, siteConfig } from "@/lib/site-data"
 import {
   getPublicCaseBySlug,
   getPublicCaseGallery,
@@ -158,6 +158,20 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
   const hasIntro = Boolean(caseItem.description_html && caseItem.description_html.trim())
   const hasBody = Boolean(caseItem.detail_html && caseItem.detail_html.trim())
 
+  // 案例基本資料: label→value pairs. Blank/null values are omitted (no fake
+  // "未設定" placeholder). 所在地 reuses `location`; the four new fields follow.
+  const basicInfo = [
+    { label: "所在地", value: caseItem.location?.trim() },
+    { label: "類別", value: caseItem.property_type?.trim() },
+    { label: "屋況", value: caseItem.property_condition?.trim() },
+    { label: "坪數", value: caseItem.floor_area?.trim() },
+    { label: "格局", value: caseItem.layout?.trim() },
+  ].filter((row): row is { label: string; value: string } => Boolean(row.value))
+
+  // LINE 預約 renders ONLY when a usable official LINE URL exists in the shared
+  // site config (no fake/guessed URL). 我要驗屋 always links to /contact.
+  const lineUrl = siteConfig.line?.trim() ? siteConfig.line.trim() : null
+
   return (
     <>
       <article className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
@@ -192,6 +206,53 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           back to a placeholder large image (handled inside CaseGallery).
         */}
         <CaseGallery images={gallery} caseName={caseItem.name} />
+
+        {/*
+          案例基本資料: clean information grid. Rendered only when at least one
+          field is present; otherwise hidden entirely (no empty card). The CTA
+          action area below renders regardless so incomplete historical cases
+          still expose 我要驗屋 / LINE 預約.
+        */}
+        {basicInfo.length > 0 && (
+          <section className="mt-10 rounded-2xl border border-border bg-card p-6">
+            <h2 className="text-lg font-bold text-primary">案例基本資料</h2>
+            <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+              {basicInfo.map((row) => (
+                <div
+                  key={row.label}
+                  className="flex items-baseline gap-4 border-b border-border/60 pb-3"
+                >
+                  <dt className="w-16 shrink-0 text-sm font-medium text-muted-foreground">
+                    {row.label}
+                  </dt>
+                  <dd className="text-sm font-semibold text-foreground">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+
+        {/* Public CTA buttons (not per-case fields). */}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/contact"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <ClipboardCheck className="size-4" />
+            我要驗屋
+          </Link>
+          {lineUrl && (
+            <a
+              href={lineUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-secondary bg-secondary/10 px-6 py-3 text-sm font-semibold text-secondary transition-colors hover:bg-secondary/20"
+            >
+              <MessageCircle className="size-4" />
+              LINE 預約
+            </a>
+          )}
+        </div>
 
         {hasIntro && (
           <div className="mt-10 rounded-2xl border border-border bg-accent/40 p-6">
