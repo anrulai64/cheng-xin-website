@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
-import { isValidSlug } from "@/lib/admin/cases/slug"
+import { isValidSlug, nextNumericSlug } from "@/lib/admin/cases/slug"
 import { isHtmlContentEmpty } from "@/lib/admin/cases/html"
 
 const BUCKET = "case-images"
@@ -162,6 +162,29 @@ function uniqueError(message: string): string {
   return "資料重複，請檢查自訂網址與案例編號是否已存在。"
 }
 
+/**
+ * Compute the next sequential numeric slug ("01", "02", ...) from the CURRENT
+ * set of case_items slugs. Highest-numeric + 1 (no gap filling). Because there
+ * is no persistent DB sequence, this reflects only slugs that exist right now.
+ */
+async function generateNextNumericSlug(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string> {
+  const { data } = await supabase.from("case_items").select("slug")
+  return nextNumericSlug((data ?? []).map((r) => r.slug))
+}
+
+/**
+ * True when a Postgres error is a UNIQUE violation (23505) specifically on the
+ * slug constraint — used to drive the bounded auto-slug retry without masking
+ * other unique collisions (e.g. case_code).
+ */
+function isSlugUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  return !!error && error.code === "23505" && !!error.message?.toLowerCase().includes("slug")
+}
+
+const AUTO_SLUG_MAX_RETRIES = 5
+
 /** Create a new case_items record. */
 export async function createCase(form: FormData): Promise<ActionResult> {
   await requireAdmin()
@@ -181,15 +204,45 @@ export async function createCase(form: FormData): Promise<ActionResult> {
     .limit(1)
   const nextSortOrder = maxRows && maxRows.length > 0 ? (maxRows[0].sort_order ?? 0) + 1 : 0
 
-  const { data: inserted, error } = await supabase
-    .from("case_items")
-    .insert({ ...parsed.data, sort_order: nextSortOrder })
-    .select("id")
-    .single()
+  // Slug policy: a non-blank manual slug is preserved as-is (already validated
+  // in parseCaseForm). A blank slug triggers server-side sequential numeric
+  // generation so the case is NEVER saved with a null slug just because the
+  // admin left the field empty.
+  const autoSlug = parsed.data.slug === null
 
-  if (error || !inserted) {
-    if (error?.code === "23505") return { ok: false, error: uniqueError(error.message) }
-    return { ok: false, error: `新增案例失敗：${error?.message ?? "未知錯誤"}` }
+  let inserted: { id: string } | null = null
+  let lastError: { code?: string; message?: string } | null = null
+
+  // Bounded retry: only meaningful for auto-generated slugs, where a concurrent
+  // create could claim the same "max+1" candidate. A manual slug is attempted
+  // once and any collision is reported to the admin.
+  const attempts = autoSlug ? AUTO_SLUG_MAX_RETRIES : 1
+  for (let i = 0; i < attempts; i++) {
+    const slug = autoSlug ? await generateNextNumericSlug(supabase) : parsed.data.slug
+
+    const { data, error } = await supabase
+      .from("case_items")
+      .insert({ ...parsed.data, slug, sort_order: nextSortOrder })
+      .select("id")
+      .single()
+
+    if (!error && data) {
+      inserted = data
+      break
+    }
+
+    lastError = error
+    // Retry ONLY on a slug-specific unique collision while auto-generating.
+    if (autoSlug && isSlugUniqueViolation(error)) continue
+    break
+  }
+
+  if (!inserted) {
+    if (lastError?.code === "23505") return { ok: false, error: uniqueError(lastError.message ?? "") }
+    if (autoSlug && isSlugUniqueViolation(lastError)) {
+      return { ok: false, error: "自動產生網址代碼時發生衝突，請再試一次。" }
+    }
+    return { ok: false, error: `新增案例失敗：${lastError?.message ?? "未知錯誤"}` }
   }
 
   // ---- 相關案例: create directional relationships together with the case ----
@@ -272,11 +325,36 @@ export async function updateCase(id: string, form: FormData): Promise<ActionResu
 
   const supabase = await createClient()
 
-  const { error } = await supabase.from("case_items").update(parsed.data).eq("id", id)
+  // Slug policy on update:
+  //  - non-blank submitted slug -> preserved exactly (manual change or unchanged)
+  //  - blank submitted slug      -> generate the next sequential numeric slug
+  //    so a saved case never ends up with a null/blank public URL (covers both
+  //    older NULL data and an admin intentionally clearing the field).
+  const autoSlug = parsed.data.slug === null
 
-  if (error) {
-    if (error.code === "23505") return { ok: false, error: uniqueError(error.message) }
-    return { ok: false, error: `更新案例失敗：${error.message}` }
+  let updateError: { code?: string; message?: string } | null = null
+  const attempts = autoSlug ? AUTO_SLUG_MAX_RETRIES : 1
+  for (let i = 0; i < attempts; i++) {
+    const slug = autoSlug ? await generateNextNumericSlug(supabase) : parsed.data.slug
+
+    const { error } = await supabase
+      .from("case_items")
+      .update({ ...parsed.data, slug })
+      .eq("id", id)
+
+    if (!error) {
+      updateError = null
+      break
+    }
+
+    updateError = error
+    if (autoSlug && isSlugUniqueViolation(error)) continue
+    break
+  }
+
+  if (updateError) {
+    if (updateError.code === "23505") return { ok: false, error: uniqueError(updateError.message ?? "") }
+    return { ok: false, error: `更新案例失敗：${updateError.message ?? "未知錯誤"}` }
   }
 
   revalidatePath(LIST_PATH)
@@ -425,42 +503,64 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
   // Internal, clearly-marked, collision-safe temporary code.
   const copyCode = `COPY-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("case_items")
-    .insert({
-      category_id: original.category_id,
-      name: `${original.name}（複製）`,
-      short_description: original.short_description,
-      seo_title: original.seo_title,
-      seo_keywords: original.seo_keywords,
-      seo_description: original.seo_description,
-      head_code: original.head_code,
-      slug: null,
-      price: original.price,
-      original_price: original.original_price,
-      is_home: original.is_home,
-      is_new: original.is_new,
-      is_hot: original.is_hot,
-      is_recommended: original.is_recommended,
-      publish_start: original.publish_start,
-      publish_end: original.publish_end,
-      status: original.status,
-      description_html: original.description_html,
-      detail_html: original.detail_html,
-      note: original.note,
-      specification_type: original.specification_type,
-      specification_description: original.specification_description,
-      case_code: copyCode,
-      stock_quantity: original.stock_quantity,
-      safety_stock: original.safety_stock,
-      shipping_rule: original.shipping_rule,
-      location: original.location,
-      sort_order: nextSortOrder,
-    })
-    .select("id")
-    .single()
+  // A duplicate must NOT copy the original slug (slug is unique) and must not
+  // remain null: assign the next sequential numeric slug, with bounded retry
+  // for concurrent duplicate/create races.
+  let inserted: { id: string } | null = null
+  let insertError: { code?: string; message?: string } | null = null
 
-  if (insertError || !inserted) {
+  for (let i = 0; i < AUTO_SLUG_MAX_RETRIES; i++) {
+    const slug = await generateNextNumericSlug(supabase)
+
+    const { data, error } = await supabase
+      .from("case_items")
+      .insert({
+        category_id: original.category_id,
+        name: `${original.name}（複製）`,
+        short_description: original.short_description,
+        seo_title: original.seo_title,
+        seo_keywords: original.seo_keywords,
+        seo_description: original.seo_description,
+        head_code: original.head_code,
+        slug,
+        price: original.price,
+        original_price: original.original_price,
+        is_home: original.is_home,
+        is_new: original.is_new,
+        is_hot: original.is_hot,
+        is_recommended: original.is_recommended,
+        publish_start: original.publish_start,
+        publish_end: original.publish_end,
+        status: original.status,
+        description_html: original.description_html,
+        detail_html: original.detail_html,
+        note: original.note,
+        specification_type: original.specification_type,
+        specification_description: original.specification_description,
+        case_code: copyCode,
+        stock_quantity: original.stock_quantity,
+        safety_stock: original.safety_stock,
+        shipping_rule: original.shipping_rule,
+        location: original.location,
+        sort_order: nextSortOrder,
+      })
+      .select("id")
+      .single()
+
+    if (!error && data) {
+      inserted = data
+      break
+    }
+
+    insertError = error
+    if (isSlugUniqueViolation(error)) continue
+    break
+  }
+
+  if (!inserted) {
+    if (isSlugUniqueViolation(insertError)) {
+      return { ok: false, error: "複製失敗：自動產生網址代碼時發生衝突，請再試一次。" }
+    }
     if (insertError?.code === "23505") {
       return { ok: false, error: "複製失敗：案例編號重複，請再試一次。" }
     }
