@@ -254,6 +254,76 @@ export async function getPublicCaseCategories(): Promise<PublicCaseCategory[]> {
   return data ?? []
 }
 
+// ---------------------------------------------------------------------------
+// Sitemap-only projections. Deliberately lean: only the fields sitemap.xml
+// needs (slug + timestamps). Kept separate from PublicCaseCard/PublicCaseCategory
+// so those consumer shapes stay narrow. Both reuse the SAME public anon client
+// and (for cases) the SAME centralized visibility rule as the rest of the layer.
+// ---------------------------------------------------------------------------
+
+export type PublicCaseSitemapEntry = {
+  slug: string | null
+  updated_at: string | null
+  created_at: string | null
+}
+
+export type PublicCaseCategorySitemapEntry = {
+  slug: string | null
+  updated_at: string | null
+  created_at: string | null
+}
+
+/**
+ * Publicly visible Case Studies for sitemap generation. Applies the shared
+ * visibility rule (status <> 'offline' AND publish window current) so offline /
+ * not-yet-published / expired cases are excluded, exactly like the public list.
+ * Selects only slug + timestamps — no category names, covers, HTML, gallery, or
+ * related cases. Slug filtering (null/blank) is left to the caller.
+ */
+export async function getPublicCaseSitemapEntries(): Promise<PublicCaseSitemapEntry[]> {
+  const supabase = await createClient()
+
+  const { data, error } = await withCaseVisibility(
+    supabase.from("case_items").select("slug, updated_at, created_at"),
+  )
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  assertNoError(error, "getPublicCaseSitemapEntries")
+
+  return (data ?? []).map((r) => ({
+    slug: r.slug,
+    updated_at: r.updated_at,
+    created_at: r.created_at,
+  }))
+}
+
+/**
+ * All Case Study categories for sitemap generation (slug + timestamps only).
+ * Categories are route-level valid even with zero public cases, so no
+ * visibility/case-count filter is applied here. Slug filtering is left to the
+ * caller. Uses updated_at when present, else created_at, for lastModified.
+ */
+export async function getPublicCaseCategorySitemapEntries(): Promise<
+  PublicCaseCategorySitemapEntry[]
+> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("case_categories")
+    .select("slug, updated_at, created_at")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  assertNoError(error, "getPublicCaseCategorySitemapEntries")
+
+  return (data ?? []).map((c) => ({
+    slug: c.slug,
+    updated_at: c.updated_at,
+    created_at: c.created_at,
+  }))
+}
+
 /**
  * All publicly visible Case Studies as cards, ordered sort_order ASC,
  * created_at ASC. Applies the shared visibility rule; resolves category name
