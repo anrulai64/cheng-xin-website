@@ -27,7 +27,6 @@ export async function getAdminUser(): Promise<AdminUser | null> {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    console.error("DEBUG_AUTH: getAdminUser — no session/user (getUser returned null)")
     return null
   }
 
@@ -35,7 +34,6 @@ export async function getAdminUser(): Promise<AdminUser | null> {
   // signed-in email is allowlisted (keeps the gate consistent with the login
   // route when RLS blocks the table SELECT).
   if (isAllowlistedAdmin(user.email)) {
-    console.error("DEBUG_AUTH: getAdminUser — granted via allowlist", { userEmail: user.email })
     return {
       id: user.id,
       email: user.email ?? "",
@@ -56,15 +54,6 @@ export async function getAdminUser(): Promise<AdminUser | null> {
     .select("user_id, email, role")
     .or(filters.join(","))
     .limit(1)
-
-  console.error("DEBUG_AUTH: getAdminUser lookup", {
-    userId: user.id,
-    userEmail: user.email,
-    filters,
-    error: error ? { code: error.code, message: error.message, details: error.details } : null,
-    rowCount: rows?.length ?? 0,
-    rows,
-  })
 
   if (error || !rows || rows.length === 0) return null
 

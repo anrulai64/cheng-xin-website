@@ -24,14 +24,13 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    console.log("前端觸發登入", { email })
     setError(null)
     setLoading(true)
 
     try {
       // Standard client-side POST to the API route. All auth + admin
       // verification happens server-side, so session cookies are written
-      // reliably and DEBUG_AUTH logs land in the Vercel runtime logs.
+      // reliably by the route handler.
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,7 +41,6 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
         ok: boolean
         code?: string
       }
-      console.log("前端收到伺服器回應", { status: res.status, result })
 
       if (!result.ok) {
         switch (result.code) {

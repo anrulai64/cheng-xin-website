@@ -1,0 +1,30 @@
+-- ---------------------------------------------------------------------------
+-- 009_admin_users_select_grant.sql
+--
+-- Persist the missing table-level SELECT privilege on public.admin_users.
+--
+-- Background:
+--   public.admin_users already has Row Level Security enabled with the
+--   own-row policy `admin_users_select_own`
+--     (auth.uid() = user_id OR lower(email) = lower(auth.jwt() ->> 'email')).
+--   However, PostgREST/Postgres check table-level privileges BEFORE RLS is
+--   evaluated. Without a table-level GRANT, every SELECT fails with
+--   "permission denied for table admin_users" (42501) before the own-row
+--   policy can even run.
+--
+--   This is why the second admin could not log in: the first admin was
+--   authorized via the hard-coded allowlist (which never reads admin_users),
+--   while the non-allowlisted second admin's direct admin_users SELECT was
+--   rejected at the privilege layer.
+--
+--   This migration mirrors the fix already applied manually to the live
+--   database, making the repository the source of truth. Idempotent.
+--
+-- Security model (unchanged):
+--   - authenticated gets SELECT ONLY. RLS remains authoritative, so a
+--     signed-in user can still only read their OWN matching admin_users row.
+--   - No INSERT/UPDATE/DELETE is granted to authenticated.
+--   - No privilege is granted to anon.
+-- ---------------------------------------------------------------------------
+
+grant select on table public.admin_users to authenticated;
