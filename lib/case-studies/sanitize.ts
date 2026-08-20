@@ -59,6 +59,19 @@ export function htmlToPlainExcerpt(
   return `${text.slice(0, maxLength - 1).trimEnd()}…`
 }
 
+/**
+ * Full plain-text extraction from CMS HTML (no truncation). Strips ALL tags,
+ * decodes entities via sanitize-html, and collapses whitespace. Used for
+ * JSON-LD acceptedAnswer.text so structured data never contains HTML markup.
+ * Server-only; never used for rendering.
+ */
+export function htmlToPlainText(dirty: string | null | undefined): string {
+  if (!dirty || typeof dirty !== "string") return ""
+  return sanitizeHtml(dirty, { allowedTags: [], allowedAttributes: {} })
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function sanitizeCaseHtml(dirty: string | null | undefined): string {
   if (!dirty || typeof dirty !== "string") return ""
 

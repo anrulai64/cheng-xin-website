@@ -1,11 +1,23 @@
 import { siteConfig, serviceAreas, services } from "@/lib/site-data"
 
+/**
+ * Serialize JSON-LD safely for embedding in a <script> element. Escapes the
+ * characters that could break out of the script context or corrupt parsing —
+ * `<`, `>`, `&`, and the U+2028 / U+2029 line separators — so strings such as
+ * "</script>" contained in trusted/plain-text data cannot terminate the tag.
+ */
+function safeJsonLd(data: object): string {
+  return JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029")
+}
+
 function JsonLd({ data }: { data: object }) {
   return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
-    />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(data) }} />
   )
 }
 

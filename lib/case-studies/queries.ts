@@ -425,3 +425,41 @@ export async function getPublicCaseIntroContent(): Promise<string | null> {
   assertNoError(error, "getPublicCaseIntroContent")
   return data?.content_html ?? null
 }
+
+// ---------------------------------------------------------------------------
+// Shared Case Study FAQ (case_faqs). Displayed in the「常見問題」tab on Case
+// Study detail pages. Not per-case. The visibility filter mirrors the RLS
+// predicate (is_visible = true); RLS remains authoritative.
+// ---------------------------------------------------------------------------
+
+export type PublicCaseFaq = {
+  id: string
+  question: string
+  answer_html: string
+  sort_order: number
+}
+
+/**
+ * All publicly visible shared Case Study FAQs, ordered sort_order ASC then
+ * created_at ASC. Returns only the public-facing columns; no admin-only data.
+ * Server-only (this module is `server-only`); never queried from the client.
+ */
+export async function getPublicCaseFaqs(): Promise<PublicCaseFaq[]> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("case_faqs")
+    .select("id, question, answer_html, sort_order")
+    .eq("is_visible", true)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  assertNoError(error, "getPublicCaseFaqs")
+
+  return (data ?? []).map((f) => ({
+    id: f.id,
+    question: f.question,
+    answer_html: f.answer_html,
+    sort_order: f.sort_order,
+  }))
+}

@@ -582,6 +582,36 @@ export interface Database {
         }
         Relationships: []
       }
+      case_faqs: {
+        Row: {
+          id: string
+          question: string
+          answer_html: string
+          sort_order: number
+          is_visible: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          question: string
+          answer_html: string
+          sort_order?: number
+          is_visible?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          question?: string
+          answer_html?: string
+          sort_order?: number
+          is_visible?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       case_intro_content: {
         Row: {
           id: string
