@@ -273,6 +273,56 @@ export async function getPublicCaseList(): Promise<PublicCaseCard[]> {
 }
 
 /**
+ * One public Case Study category by EXACT slug, or null when not found.
+ * Returns only public-facing category fields (no admin-only columns, no
+ * service_role, no requireAdmin). Blank/empty slugs short-circuit to null so a
+ * `/category/` with a missing segment can never match a real row.
+ */
+export async function getPublicCaseCategoryBySlug(
+  slug: string,
+): Promise<PublicCaseCategory | null> {
+  const trimmed = slug?.trim()
+  if (!trimmed) return null
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("case_categories")
+    .select("id, name, slug, image_url, seo_title, seo_description, seo_keywords")
+    .eq("slug", trimmed)
+    .maybeSingle()
+
+  assertNoError(error, "getPublicCaseCategoryBySlug")
+  return data ?? null
+}
+
+/**
+ * Publicly visible Case Studies belonging to ONE category, as cards, ordered
+ * sort_order ASC then created_at ASC. Reuses the SAME centralized visibility
+ * rule (`withCaseVisibility`) and the same card builder as getPublicCaseList,
+ * so category listings can never diverge from the global list's visibility.
+ * Does not load detail_html, gallery, or related cases. A valid category with
+ * zero visible cases legitimately returns [].
+ */
+export async function getPublicCaseListByCategory(
+  categoryId: string,
+): Promise<PublicCaseCard[]> {
+  const trimmed = categoryId?.trim()
+  if (!trimmed) return []
+
+  const supabase = await createClient()
+
+  const { data, error } = await withCaseVisibility(
+    supabase.from("case_items").select(CARD_COLUMNS).eq("category_id", trimmed),
+  )
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  assertNoError(error, "getPublicCaseListByCategory")
+  return buildCards(supabase, (data ?? []) as CaseCardRow[])
+}
+
+/**
  * One publicly visible Case Study by exact slug, or null when the slug does
  * not exist or the case is offline / not yet published / expired. Includes the
  * HTML bodies and SEO fields needed for future detail rendering, plus resolved
