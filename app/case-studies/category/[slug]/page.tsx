@@ -12,6 +12,7 @@ import {
   toBlank,
   CaseCardGrid,
 } from "@/components/case-studies/case-card"
+import { CategoryNav } from "@/components/case-studies/category-nav"
 
 // CMS-created category slugs must work without hard-coded generateStaticParams.
 // The shared Supabase server client reads cookies, so this route resolves
@@ -110,6 +111,9 @@ export default async function CaseCategoryPage({ params }: CategoryPageProps) {
       />
 
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+        {/* Same shared nav as /case-studies; this category's pill is active. */}
+        <CategoryNav activeSlug={category.slug ?? slug} />
+
         {/* Restrained category visual, only when a real image exists. */}
         {heroImage ? (
           <div className="mb-10 overflow-hidden rounded-2xl">
