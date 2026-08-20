@@ -68,3 +68,20 @@ create policy "case_faqs_admin_update" on public.case_faqs
 drop policy if exists "case_faqs_admin_delete" on public.case_faqs;
 create policy "case_faqs_admin_delete" on public.case_faqs
   for delete to authenticated using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- 4. Table-level privileges (GRANTs) — REQUIRED IN ADDITION TO RLS.
+--    RLS restricts WHICH rows a role can touch, but PostgREST first needs the
+--    underlying table privilege or every request fails with
+--    "permission denied for table case_faqs". These GRANTs are the missing
+--    layer; RLS above remains fully authoritative.
+--
+--    - anon + authenticated get SELECT only (row visibility still enforced by
+--      the case_faqs_select_public policy: is_visible = true).
+--    - authenticated additionally gets INSERT/UPDATE/DELETE, but every write
+--      is still gated by public.is_admin() in the policies above.
+--    - anon is deliberately NOT granted any write privilege.
+--    GRANT statements are idempotent (safe to re-run).
+-- ---------------------------------------------------------------------------
+grant select on table public.case_faqs to anon, authenticated;
+grant insert, update, delete on table public.case_faqs to authenticated;
