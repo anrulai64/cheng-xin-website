@@ -528,24 +528,6 @@ export async function getPublicRelatedCases(
   return buildCards(supabase, orderedVisible)
 }
 
-/**
- * The single visible case intro content HTML (case_intro_content where
- * is_visible = true), or null when no visible row exists. Singleton-safe via
- * maybeSingle. Not rendered publicly in this STEP.
- */
-export async function getPublicCaseIntroContent(): Promise<string | null> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from("case_intro_content")
-    .select("content_html")
-    .eq("is_visible", true)
-    .maybeSingle()
-
-  assertNoError(error, "getPublicCaseIntroContent")
-  return data?.content_html ?? null
-}
-
 // ---------------------------------------------------------------------------
 // Shared Case Study FAQ (case_faqs). Displayed in the「常見問題」tab on Case
 // Study detail pages. Not per-case. The visibility filter mirrors the RLS
