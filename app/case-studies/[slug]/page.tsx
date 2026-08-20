@@ -8,13 +8,17 @@ import { caseStudies, siteConfig } from "@/lib/site-data"
 import {
   getPublicCaseBySlug,
   getPublicCaseGallery,
+  getPublicCaseIntroContent,
+  getPublicCaseFaqs,
   getPublicRelatedCases,
   type PublicCaseDetail,
 } from "@/lib/case-studies/queries"
 import { SafeHtml } from "@/components/case-studies/safe-html"
 import { CaseGallery } from "@/components/case-studies/case-gallery"
 import { RelatedCaseCards } from "@/components/case-studies/related-case-cards"
-import { htmlToPlainExcerpt } from "@/lib/case-studies/sanitize"
+import { CaseInfoTabs } from "@/components/case-studies/case-info-tabs"
+import { FaqSchema } from "@/components/structured-data"
+import { htmlToPlainExcerpt, htmlToPlainText, sanitizeCaseHtml } from "@/lib/case-studies/sanitize"
 
 // Prebuild the six historical (legacy) slugs so their URLs keep SSG behavior.
 // `dynamicParams` stays at its default (true), so CMS cases created after the
@@ -143,12 +147,35 @@ export default async function CaseStudyPage({
 // ---------------------------------------------------------------------------
 
 async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
-  // The case id is resolved; gallery + related reads are independent, so run
-  // them in parallel. No client-side fetching, no caching in this STEP.
-  const [gallery, relatedCases] = await Promise.all([
+  // The case id is resolved; gallery + related + shared intro/FAQ reads are
+  // independent, so run them in parallel. No client-side fetching. The intro
+  // and FAQ are the shared (全站共用) informational sources — separate from
+  // this case's own description_html / detail_html rendered above.
+  const [gallery, relatedCases, introRaw, faqs] = await Promise.all([
     getPublicCaseGallery(caseItem.id),
     getPublicRelatedCases(caseItem.id),
+    getPublicCaseIntroContent(),
+    getPublicCaseFaqs(),
   ])
+
+  // Sanitize on the SERVER (sanitizeCaseHtml is server-only) before handing
+  // trusted markup to the client tab component. Empty sanitized intro => no
+  // intro tab; zero visible FAQs => no FAQ tab; both empty => hide the section.
+  const introClean = sanitizeCaseHtml(introRaw)
+  const introHtml = introClean.length > 0 ? introClean : null
+
+  const cleanFaqs = faqs
+    .map((f) => ({ id: f.id, question: f.question, answerHtml: sanitizeCaseHtml(f.answer_html) }))
+    .filter((f) => f.answerHtml.length > 0)
+
+  const hasSharedInfo = introHtml !== null || cleanFaqs.length > 0
+
+  // FAQPage JSON-LD uses the SAME visible FAQ entries shown on the page, with
+  // acceptedAnswer.text as plain text (no HTML) derived from the sanitized
+  // answer. Emitted only when visible FAQs exist.
+  const faqSchemaItems = cleanFaqs
+    .map((f) => ({ q: f.question, a: htmlToPlainText(f.answerHtml) }))
+    .filter((f) => f.a.length > 0)
 
   // The full gallery (order = getPublicCaseGallery: sort_order ASC,
   // created_at ASC) is handed to CaseGallery, which owns selected-image state
@@ -273,6 +300,13 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           )
         )}
 
+        {/*
+          Shared「案例介紹 / 常見問題」section (全站共用；並非附屬於單一案例)。
+          Rendered only when at least one side has content; the tab component
+          drops any side that is empty. NOT applied to LegacyCaseView.
+        */}
+        {hasSharedInfo ? <CaseInfoTabs introHtml={introHtml} faqs={cleanFaqs} /> : null}
+
         <Link
           href="/case-studies"
           className="mt-10 inline-flex items-center gap-1.5 text-sm font-semibold text-secondary transition-colors hover:text-primary"
@@ -281,6 +315,9 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           返回所有案例
         </Link>
       </article>
+
+      {/* FAQPage structured data — same visible FAQ entries as rendered above. */}
+      {faqSchemaItems.length > 0 ? <FaqSchema faqs={faqSchemaItems} /> : null}
 
       {/*
         Real CMS-configured related cases (directional + visibility-filtered by
