@@ -8,7 +8,6 @@ import { caseStudies, siteConfig } from "@/lib/site-data"
 import {
   getPublicCaseBySlug,
   getPublicCaseGallery,
-  getPublicCaseIntroContent,
   getPublicCaseFaqs,
   getPublicRelatedCases,
   type PublicCaseDetail,
@@ -147,28 +146,28 @@ export default async function CaseStudyPage({
 // ---------------------------------------------------------------------------
 
 async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
-  // The case id is resolved; gallery + related + shared intro/FAQ reads are
-  // independent, so run them in parallel. No client-side fetching. The intro
-  // and FAQ are the shared (全站共用) informational sources — separate from
-  // this case's own description_html / detail_html rendered above.
-  const [gallery, relatedCases, introRaw, faqs] = await Promise.all([
+  // The case id is resolved; gallery + related + shared FAQ reads are
+  // independent, so run them in parallel. No client-side fetching.
+  const [gallery, relatedCases, faqs] = await Promise.all([
     getPublicCaseGallery(caseItem.id),
     getPublicRelatedCases(caseItem.id),
-    getPublicCaseIntroContent(),
     getPublicCaseFaqs(),
   ])
 
-  // Sanitize on the SERVER (sanitizeCaseHtml is server-only) before handing
-  // trusted markup to the client tab component. Empty sanitized intro => no
-  // intro tab; zero visible FAQs => no FAQ tab; both empty => hide the section.
-  const introClean = sanitizeCaseHtml(introRaw)
-  const introHtml = introClean.length > 0 ? introClean : null
+  // 「案例介紹」tab source = THIS case's own detail_html (case_items.detail_html),
+  // already loaded via getPublicCaseBySlug — NOT the shared case_intro_content.
+  // Sanitize on the SERVER (sanitizeCaseHtml is server-only) before handing the
+  // trusted markup to the client tab component (which renders inside
+  // `.case-content`, matching the SafeHtml path). Empty sanitized detail => no
+  // 案例介紹 tab; zero visible FAQs => no 常見問題 tab; both empty => hide section.
+  const detailClean = sanitizeCaseHtml(caseItem.detail_html)
+  const detailTabHtml = detailClean.length > 0 ? detailClean : null
 
   const cleanFaqs = faqs
     .map((f) => ({ id: f.id, question: f.question, answerHtml: sanitizeCaseHtml(f.answer_html) }))
     .filter((f) => f.answerHtml.length > 0)
 
-  const hasSharedInfo = introHtml !== null || cleanFaqs.length > 0
+  const hasSharedInfo = detailTabHtml !== null || cleanFaqs.length > 0
 
   // FAQPage JSON-LD uses the SAME visible FAQ entries shown on the page, with
   // acceptedAnswer.text as plain text (no HTML) derived from the sanitized
@@ -183,7 +182,6 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
   const location = caseItem.location?.trim()
   const category = caseItem.category_name?.trim()
   const hasIntro = Boolean(caseItem.description_html && caseItem.description_html.trim())
-  const hasBody = Boolean(caseItem.detail_html && caseItem.detail_html.trim())
 
   // 案例基本資料: label→value pairs. Blank/null values are omitted (no fake
   // "未設定" placeholder). 所在地 reuses `location`; the four new fields follow.
@@ -287,11 +285,17 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           </div>
         )}
 
-        {hasBody ? (
-          <SafeHtml
-            html={caseItem.detail_html}
-            className="mt-10 leading-relaxed text-foreground"
-          />
+        {/*
+          「案例介紹 / 常見問題」section.
+          案例介紹 → THIS case's detail_html (case_items.detail_html).
+          常見問題 → shared visible case_faqs.
+          Rendered only when at least one side has content; the tab component
+          drops any side that is empty. detail_html is rendered ONLY here now
+          (no separate body block above) to avoid duplicate content.
+          NOT applied to LegacyCaseView.
+        */}
+        {hasSharedInfo ? (
+          <CaseInfoTabs introHtml={detailTabHtml} faqs={cleanFaqs} />
         ) : (
           !hasIntro && (
             <p className="mt-10 leading-relaxed text-muted-foreground">
@@ -299,13 +303,6 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
             </p>
           )
         )}
-
-        {/*
-          Shared「案例介紹 / 常見問題」section (全站共用；並非附屬於單一案例)。
-          Rendered only when at least one side has content; the tab component
-          drops any side that is empty. NOT applied to LegacyCaseView.
-        */}
-        {hasSharedInfo ? <CaseInfoTabs introHtml={introHtml} faqs={cleanFaqs} /> : null}
 
         <Link
           href="/case-studies"
