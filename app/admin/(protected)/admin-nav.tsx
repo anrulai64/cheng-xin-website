@@ -21,7 +21,6 @@ const NAV: (NavItem | NavGroup)[] = [
       { label: "分類排序", href: "/admin/cases/categories/sort" },
       { label: "案例管理", href: "/admin/cases" },
       { label: "案例排序", href: "/admin/cases/sort" },
-      { label: "案例介紹文字", href: "/admin/cases/intro" },
       { label: "常見問題", href: "/admin/cases/faq" },
     ],
   },
