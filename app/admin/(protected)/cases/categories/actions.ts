@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { isValidSlug, slugify } from "@/lib/admin/cases/slug"
+import type { Database } from "@/lib/supabase/database.types"
 
 const BUCKET = "case-images"
 const LIST_PATH = "/admin/cases/categories"
@@ -165,7 +166,7 @@ export async function updateCategory(id: string, formData: FormData): Promise<Ac
     }
   }
 
-  const updatePayload: Record<string, unknown> = {
+  const updatePayload: Database["public"]["Tables"]["case_categories"]["Update"] = {
     name: fields.name,
     seo_title: fields.seo_title,
     seo_keywords: fields.seo_keywords,
