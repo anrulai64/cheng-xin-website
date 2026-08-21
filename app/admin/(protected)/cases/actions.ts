@@ -248,11 +248,6 @@ export async function createCase(form: FormData): Promise<ActionResult> {
         ...parsed.data,
         slug,
         sort_order: nextSortOrder,
-        // 規格 (specification_type) is retired from the application layer
-        // (STEP 14H) but the column is still `not null` with no DB default.
-        // Write a fixed empty value here only to satisfy that constraint —
-        // never sourced from user input.
-        specification_type: "",
       })
       .select("id")
       .single()
@@ -647,12 +642,6 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
         description_html: original.description_html,
         detail_html: original.detail_html,
         note: original.note,
-        // 規格 (specification_type) is retired from the application layer
-        // (STEP 14H): never copy the original's value. The column is still
-        // `not null` with no DB default, so write a fixed empty value only to
-        // satisfy that constraint; specification_description is nullable and
-        // simply omitted (stays null on the new row).
-        specification_type: "",
         case_code: copyCode,
         stock_quantity: original.stock_quantity,
         safety_stock: original.safety_stock,

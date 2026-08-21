@@ -440,8 +440,6 @@ export interface Database {
           description_html: string | null
           detail_html: string | null
           note: string | null
-          specification_type: string
-          specification_description: string | null
           case_code: string
           stock_quantity: number | null
           safety_stock: number | null
@@ -477,8 +475,6 @@ export interface Database {
           description_html?: string | null
           detail_html?: string | null
           note?: string | null
-          specification_type: string
-          specification_description?: string | null
           case_code: string
           stock_quantity?: number | null
           safety_stock?: number | null
@@ -514,8 +510,6 @@ export interface Database {
           description_html?: string | null
           detail_html?: string | null
           note?: string | null
-          specification_type?: string
-          specification_description?: string | null
           case_code?: string
           stock_quantity?: number | null
           safety_stock?: number | null
