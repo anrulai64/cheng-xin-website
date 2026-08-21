@@ -164,3 +164,45 @@ export async function updateCategory(id: string, formData: FormData): Promise<Ac
   revalidatePath(LIST_PATH)
   return { ok: true, id }
 }
+
+const CATEGORY_IN_USE_ERROR = "此文章分類目前仍有文章使用，請先將文章移至其他分類後再刪除。"
+
+export async function deleteCategory(id: string): Promise<ActionResult> {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  // Proactive usage guard: only need to know whether at least one Article
+  // exists, never load full rows. The FK (ON DELETE RESTRICT) remains the
+  // final safety layer for any race condition between this check and DELETE.
+  const { data: usageRows, error: usageError } = await supabase
+    .from("articles")
+    .select("id")
+    .eq("category_id", id)
+    .limit(1)
+
+  if (usageError) {
+    return { ok: false, error: "刪除文章分類失敗，請稍後再試。" }
+  }
+  if (usageRows && usageRows.length > 0) {
+    return { ok: false, error: CATEGORY_IN_USE_ERROR }
+  }
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("article_categories")
+    .delete()
+    .eq("id", id)
+    .select("id")
+
+  if (deleteError) {
+    if (deleteError.code === "23503") {
+      return { ok: false, error: CATEGORY_IN_USE_ERROR }
+    }
+    return { ok: false, error: "刪除文章分類失敗，請稍後再試。" }
+  }
+  if (!deleted || deleted.length === 0) {
+    return { ok: false, error: "文章分類不存在或已被刪除。" }
+  }
+
+  revalidatePath(LIST_PATH)
+  return { ok: true, id }
+}
