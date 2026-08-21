@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Pencil, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -72,16 +73,13 @@ export function CategoryList({ categories }: { categories: ArticleCategoryRow[] 
                 <SeoStatusBadge category={category} />
               </td>
               <td className="px-3 py-2.5">
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  title="編輯功能將於後續版本提供"
+                <Link
+                  href={`/admin/articles/categories/${category.id}/edit`}
                   className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
                 >
                   <Pencil className="size-3.5" />
                   修改
-                </button>
+                </Link>
               </td>
               <td className="px-3 py-2.5">
                 <button

@@ -1,3 +1,8 @@
+import Link from "next/link"
+import { Plus } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { buttonVariants } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { CategoryList, type ArticleCategoryRow } from "./category-list"
@@ -30,9 +35,15 @@ export default async function ArticleCategoriesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-foreground">文章分類</h1>
-        <p className="mt-1 text-sm text-muted-foreground">管理部落格文章的分類。</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground">文章分類</h1>
+          <p className="mt-1 text-sm text-muted-foreground">管理部落格文章的分類。</p>
+        </div>
+        <Link href="/admin/articles/categories/new" className={cn(buttonVariants({ size: "default" }))}>
+          <Plus className="size-4" />
+          新增文章分類
+        </Link>
       </div>
 
       {error ? (
