@@ -3,11 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AlertCircle, Loader2, Pencil, Trash2 } from "lucide-react"
+import { AlertCircle, ArrowDown, ArrowUp, Loader2, Pencil, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
-import { deleteCategory } from "./actions"
+import { deleteCategory, reorderCategory } from "./actions"
 
 export type ArticleCategoryRow = {
   id: string
@@ -49,20 +49,26 @@ export function CategoryList({ categories }: { categories: ArticleCategoryRow[] 
 
   return (
     <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[820px] border-collapse text-sm">
         <thead>
           <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
             <th className="px-3 py-2.5 font-medium">分類名稱</th>
             <th className="px-3 py-2.5 font-medium">Slug</th>
             <th className="px-3 py-2.5 font-medium">排序</th>
             <th className="px-3 py-2.5 font-medium">SEO 狀態</th>
+            <th className="px-3 py-2.5 font-medium">排序操作</th>
             <th className="w-16 px-3 py-2.5 font-medium">修改</th>
             <th className="px-3 py-2.5 font-medium">刪除</th>
           </tr>
         </thead>
         <tbody>
-          {categories.map((category) => (
-            <CategoryRow key={category.id} category={category} />
+          {categories.map((category, index) => (
+            <CategoryRow
+              key={category.id}
+              category={category}
+              isFirst={index === 0}
+              isLast={index === categories.length - 1}
+            />
           ))}
         </tbody>
       </table>
@@ -70,10 +76,20 @@ export function CategoryList({ categories }: { categories: ArticleCategoryRow[] 
   )
 }
 
-function CategoryRow({ category }: { category: ArticleCategoryRow }) {
+function CategoryRow({
+  category,
+  isFirst,
+  isLast,
+}: {
+  category: ArticleCategoryRow
+  isFirst: boolean
+  isLast: boolean
+}) {
   const router = useRouter()
   const [confirming, setConfirming] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // Shared pending/mutation state for this row: delete and reorder never run
+  // concurrently against the same row.
   const [pending, startTransition] = React.useTransition()
 
   function handleDelete() {
@@ -83,6 +99,18 @@ function CategoryRow({ category }: { category: ArticleCategoryRow }) {
       if (!result.ok) {
         setError(result.error)
         setConfirming(false)
+        return
+      }
+      router.refresh()
+    })
+  }
+
+  function handleReorder(direction: "up" | "down") {
+    setError(null)
+    startTransition(async () => {
+      const result = await reorderCategory(category.id, direction)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
       router.refresh()
@@ -107,9 +135,32 @@ function CategoryRow({ category }: { category: ArticleCategoryRow }) {
           <SeoStatusBadge category={category} />
         </td>
         <td className="px-3 py-2.5">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleReorder("up")}
+              disabled={pending || isFirst}
+              aria-label={`上移分類 ${category.name}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "px-2")}
+            >
+              <ArrowUp className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReorder("down")}
+              disabled={pending || isLast}
+              aria-label={`下移分類 ${category.name}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "px-2")}
+            >
+              <ArrowDown className="size-3.5" />
+            </button>
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
           <Link
             href={`/admin/articles/categories/${category.id}/edit`}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            aria-disabled={pending}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), pending && "pointer-events-none opacity-50")}
           >
             <Pencil className="size-3.5" />
             修改
@@ -123,6 +174,7 @@ function CategoryRow({ category }: { category: ArticleCategoryRow }) {
                 setError(null)
                 setConfirming(true)
               }}
+              disabled={pending}
               aria-label={`刪除分類「${category.name}」`}
               className={cn(buttonVariants({ variant: "destructive", size: "sm" }))}
             >
@@ -156,7 +208,7 @@ function CategoryRow({ category }: { category: ArticleCategoryRow }) {
 
       {confirming || error ? (
         <tr className="border-b last:border-0">
-          <td colSpan={6} className="px-3 pb-3">
+          <td colSpan={7} className="px-3 pb-3">
             {confirming && !error ? (
               <p className="text-xs text-muted-foreground">
                 確定要刪除「{category.name}」嗎？刪除後無法復原。

@@ -206,3 +206,57 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   revalidatePath(LIST_PATH)
   return { ok: true, id }
 }
+
+export async function reorderCategory(categoryId: string, direction: "up" | "down"): Promise<ActionResult> {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  // Server is the source of truth for ordering — never trust a client-supplied
+  // index or sort_order. Re-read the full list in the exact display order.
+  const { data: rows, error: fetchError } = await supabase
+    .from("article_categories")
+    .select("id, sort_order, created_at")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+
+  if (fetchError || !rows) {
+    return { ok: false, error: "更新文章分類排序失敗，請稍後再試。" }
+  }
+
+  const index = rows.findIndex((row) => row.id === categoryId)
+  if (index === -1) {
+    return { ok: false, error: "文章分類不存在或已被刪除。" }
+  }
+
+  const swapIndex = direction === "up" ? index - 1 : index + 1
+  if (swapIndex < 0 || swapIndex >= rows.length) {
+    // Boundary no-op: already first/last, nothing to move.
+    return { ok: true, id: categoryId }
+  }
+
+  const ordered = [...rows]
+  const tmp = ordered[index]
+  ordered[index] = ordered[swapIndex]
+  ordered[swapIndex] = tmp
+
+  // Normalize to a contiguous 1..N sequence and only write rows whose
+  // sort_order actually changes. V1 uses sequential updates because no
+  // reorder transaction RPC currently exists.
+  for (let i = 0; i < ordered.length; i++) {
+    const desired = i + 1
+    const row = ordered[i]
+    if (row.sort_order === desired) continue
+
+    const { error: updateError } = await supabase
+      .from("article_categories")
+      .update({ sort_order: desired })
+      .eq("id", row.id)
+
+    if (updateError) {
+      return { ok: false, error: "更新文章分類排序失敗，請稍後再試。" }
+    }
+  }
+
+  revalidatePath(LIST_PATH)
+  return { ok: true, id: categoryId }
+}
