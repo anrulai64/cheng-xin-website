@@ -130,6 +130,14 @@ create policy "article_related_select_public" on public.article_related_articles
     )
   );
 
+-- Admin SELECT-all policy: without this, an admin would be unable to read
+-- relation rows involving a draft/offline article once the stricter public
+-- policy above lands, breaking Related Article management in the future
+-- Article CMS admin UI. Mirrors articles_select_admin / article_faqs_select_admin.
+drop policy if exists "article_related_select_admin" on public.article_related_articles;
+create policy "article_related_select_admin" on public.article_related_articles
+  for select using (public.is_admin());
+
 -- article_related_admin_insert/update/delete (all gated by public.is_admin())
 -- are left unchanged.
 
