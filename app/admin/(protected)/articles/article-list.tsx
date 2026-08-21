@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 import { Pencil } from "lucide-react"
@@ -143,16 +145,13 @@ export function ArticleList({ rows }: { rows: ArticleListRow[] }) {
                 <SeoStatusBadge row={row} />
               </td>
               <td className="px-3 py-2.5">
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  title="編輯功能將於後續版本提供"
+                <Link
+                  href={`/admin/articles/${row.id}/edit`}
                   className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
                 >
                   <Pencil className="size-3.5" />
                   修改
-                </button>
+                </Link>
               </td>
             </tr>
           ))}

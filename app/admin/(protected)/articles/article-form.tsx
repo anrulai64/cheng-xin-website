@@ -11,11 +11,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { createArticle } from "./actions"
+import { createArticle, updateArticle } from "./actions"
 
 export type ArticleCategoryOption = {
   id: string
   name: string
+}
+
+// Initial values used to pre-fill the form in edit mode. Nullable DB fields
+// are represented as `string | null` here — the caller passes the raw row
+// shape and this component normalizes NULL to "" for each input.
+export type ArticleInitialValues = {
+  id: string
+  title: string
+  category_id: string
+  slug: string
+  status: string
+  publish_date: string | null
+  start_date: string | null
+  end_date: string | null
+  excerpt: string | null
+  seo_title: string | null
+  seo_keywords: string | null
+  seo_description: string | null
 }
 
 const LIST_PATH = "/admin/articles"
@@ -29,23 +47,25 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 export function ArticleForm({
   mode,
   categories,
+  initialValues,
 }: {
-  mode: "create"
+  mode: "create" | "edit"
   categories: ArticleCategoryOption[]
+  initialValues?: ArticleInitialValues
 }) {
   const router = useRouter()
 
-  const [title, setTitle] = React.useState("")
-  const [categoryId, setCategoryId] = React.useState("")
-  const [slug, setSlug] = React.useState("")
-  const [status, setStatus] = React.useState("draft")
-  const [publishDate, setPublishDate] = React.useState("")
-  const [startDate, setStartDate] = React.useState("")
-  const [endDate, setEndDate] = React.useState("")
-  const [excerpt, setExcerpt] = React.useState("")
-  const [seoTitle, setSeoTitle] = React.useState("")
-  const [seoKeywords, setSeoKeywords] = React.useState("")
-  const [seoDescription, setSeoDescription] = React.useState("")
+  const [title, setTitle] = React.useState(initialValues?.title ?? "")
+  const [categoryId, setCategoryId] = React.useState(initialValues?.category_id ?? "")
+  const [slug, setSlug] = React.useState(initialValues?.slug ?? "")
+  const [status, setStatus] = React.useState(initialValues?.status ?? "draft")
+  const [publishDate, setPublishDate] = React.useState(initialValues?.publish_date ?? "")
+  const [startDate, setStartDate] = React.useState(initialValues?.start_date ?? "")
+  const [endDate, setEndDate] = React.useState(initialValues?.end_date ?? "")
+  const [excerpt, setExcerpt] = React.useState(initialValues?.excerpt ?? "")
+  const [seoTitle, setSeoTitle] = React.useState(initialValues?.seo_title ?? "")
+  const [seoKeywords, setSeoKeywords] = React.useState(initialValues?.seo_keywords ?? "")
+  const [seoDescription, setSeoDescription] = React.useState(initialValues?.seo_description ?? "")
 
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -79,7 +99,8 @@ export function ArticleForm({
     formData.set("seo_description", seoDescription)
 
     try {
-      const result = mode === "create" ? await createArticle(formData) : { ok: false as const, error: "尚未支援。" }
+      const result =
+        mode === "create" ? await createArticle(formData) : await updateArticle(initialValues!.id, formData)
 
       if (!result.ok) {
         setError(result.error)

@@ -148,3 +148,84 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
   revalidatePath(LIST_PATH)
   return { ok: true, id: inserted.id }
 }
+
+export async function updateArticle(id: string, formData: FormData): Promise<ActionResult> {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  const fields = readFields(formData)
+  if ("error" in fields) return { ok: false, error: fields.error }
+
+  // Confirm the Article still exists before validating further — avoids
+  // treating a zero-row UPDATE later as a silent success.
+  const { data: existing, error: existingError } = await supabase
+    .from("articles")
+    .select("id")
+    .eq("id", id)
+    .limit(1)
+  if (existingError) {
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+  }
+  if (!existing || existing.length === 0) {
+    return { ok: false, error: "文章不存在或已被刪除。" }
+  }
+
+  // Server-side category existence check — never trust the browser <select>.
+  const { data: categoryMatch, error: categoryError } = await supabase
+    .from("article_categories")
+    .select("id")
+    .eq("id", fields.category_id)
+    .limit(1)
+  if (categoryError) {
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+  }
+  if (!categoryMatch || categoryMatch.length === 0) {
+    return { ok: false, error: "文章分類不存在，請重新選擇。" }
+  }
+
+  // Duplicate-slug pre-check, excluding this Article's own row so an unchanged
+  // slug can always be saved (the DB UNIQUE constraint is the final guard).
+  const { data: slugMatches, error: slugCheckError } = await supabase
+    .from("articles")
+    .select("id")
+    .eq("slug", fields.slug)
+    .neq("id", id)
+    .limit(1)
+  if (slugCheckError) {
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+  }
+  if (slugMatches && slugMatches.length > 0) {
+    return { ok: false, error: "此 Slug 已被其他文章使用。" }
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("articles")
+    .update({
+      title: fields.title,
+      category_id: fields.category_id,
+      slug: fields.slug,
+      status: fields.status,
+      publish_date: fields.publish_date,
+      start_date: fields.start_date,
+      end_date: fields.end_date,
+      excerpt: fields.excerpt,
+      seo_title: fields.seo_title,
+      seo_keywords: fields.seo_keywords,
+      seo_description: fields.seo_description,
+    })
+    .eq("id", id)
+    .select("id")
+
+  if (updateError) {
+    if (updateError.code === "23505") {
+      return { ok: false, error: "此 Slug 已被其他文章使用。" }
+    }
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+  }
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: "文章不存在或已被刪除。" }
+  }
+
+  revalidatePath(LIST_PATH)
+  return { ok: true, id }
+}
