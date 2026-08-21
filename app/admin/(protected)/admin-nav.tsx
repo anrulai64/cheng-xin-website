@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils"
 type NavItem = { label: string; href: string }
 type NavGroup = { label: string; items: NavItem[] }
 
-// Navigation model for the admin CMS. Article CMS is intentionally omitted
-// (postponed). Keep this in sync with the route skeletons under /admin/cases.
+// Navigation model for the admin CMS. Keep this in sync with the route
+// skeletons under /admin/cases and /admin/articles.
 const NAV: (NavItem | NavGroup)[] = [
   { label: "後台首頁", href: "/admin" },
   {
@@ -23,6 +23,10 @@ const NAV: (NavItem | NavGroup)[] = [
       { label: "案例排序", href: "/admin/cases/sort" },
       { label: "常見問題", href: "/admin/cases/faq" },
     ],
+  },
+  {
+    label: "文章管理",
+    items: [{ label: "文章分類", href: "/admin/articles/categories" }],
   },
 ]
 
