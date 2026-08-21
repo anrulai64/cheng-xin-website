@@ -50,7 +50,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
         meta.className,
       )}
     >
@@ -423,7 +423,7 @@ export function CaseListTable({
           <PageLink href={pageHref(1)} disabled={page <= 1} label="第一頁">
             <ChevronsLeft className="size-4" />
           </PageLink>
-          <PageLink href={pageHref(page - 1)} disabled={page <= 1} label="上一頁">
+          <PageLink href={pageHref(page - 1)} disabled={page <= 1} label="���一頁">
             <ChevronLeft className="size-4" />
           </PageLink>
           <PageLink href={pageHref(page + 1)} disabled={page >= totalPages} label="���一頁">
