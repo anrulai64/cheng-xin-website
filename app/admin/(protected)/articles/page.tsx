@@ -23,7 +23,7 @@ export default async function ArticlesPage() {
     .order("created_at", { ascending: false })
 
   let categoryNameById = new Map<string, string>()
-  let categoriesError: string | null = null
+  let categoriesError = false
 
   if (!articlesError && articleRows && articleRows.length > 0) {
     // Two-query approach: keeps the generated Article/Category row types
@@ -35,13 +35,13 @@ export default async function ArticlesPage() {
       .in("id", categoryIds)
 
     if (catError) {
-      categoriesError = catError.message
+      categoriesError = true
     } else {
       categoryNameById = new Map((categoryRows ?? []).map((c) => [c.id, c.name]))
     }
   }
 
-  const error = articlesError ? articlesError.message : categoriesError
+  const hasError = Boolean(articlesError) || categoriesError
 
   const rows: ArticleListRow[] = (articleRows ?? []).map((a) => ({
     id: a.id,
@@ -76,12 +76,12 @@ export default async function ArticlesPage() {
         </button>
       </div>
 
-      {error ? (
+      {hasError ? (
         <div
           role="alert"
           className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          讀取文章資料時發生錯誤：{error}
+          讀取文章資料時發生錯誤，請稍後再試。
         </div>
       ) : (
         <ArticleList rows={rows} />
