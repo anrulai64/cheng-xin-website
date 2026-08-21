@@ -209,22 +209,17 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
         />
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-12">
-          {(category || location) && (
+          {category && (
             <div className="flex flex-wrap items-center gap-3 lg:col-start-2 lg:row-start-1 lg:pt-2">
-              {category && (
-                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                  {category}
-                </span>
-              )}
-              {location && (
-                <span className="text-sm font-medium text-secondary">{location}</span>
-              )}
+              <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                {category}
+              </span>
             </div>
           )}
 
           <h1
             className={`mt-4 text-balance font-serif text-3xl font-bold text-primary sm:text-4xl lg:col-start-2 lg:mt-0 ${
-              category || location ? "lg:row-start-2" : "lg:row-start-1"
+              category ? "lg:row-start-2" : "lg:row-start-1"
             }`}
           >
             {caseItem.name}
@@ -238,7 +233,7 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           {basicInfo.length > 0 && (
             <section
               className={`rounded-2xl border border-border bg-card p-6 lg:col-start-2 ${
-                category || location ? "lg:row-start-3" : "lg:row-start-2"
+                category ? "lg:row-start-3" : "lg:row-start-2"
               }`}
             >
               <h2 className="text-lg font-bold text-primary">案例基本資料</h2>
@@ -261,7 +256,7 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           {/* Public CTA buttons (not per-case fields). */}
           <div
             className={`flex flex-col gap-3 sm:flex-row lg:col-start-2 lg:flex-col xl:flex-row ${
-              category || location
+              category
                 ? basicInfo.length > 0
                   ? "lg:row-start-4"
                   : "lg:row-start-3"
@@ -395,7 +390,7 @@ function LegacyCaseView({ item }: { item: LegacyCase }) {
 
         <div className="mt-10 rounded-2xl bg-accent/50 p-6 leading-relaxed text-muted-foreground">
           <p>
-            這個案例再次說明專業驗屋的重要性。許多��失在交屋當下不易察覺，卻可能在入住後逐漸顯現並造成困擾。
+            這個案例再次說明專業驗屋的重要性。許多��失在��屋當下不易察覺，卻可能在入住後逐漸顯現並造成困擾。
             誠昕驗屋透過專業儀器與系統化檢測，協助屋主在第一時間掌握問題並要求改善，避免後續爭議與額外負���。
           </p>
         </div>
