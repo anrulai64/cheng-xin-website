@@ -304,6 +304,10 @@ export interface Database {
           external_url: string | null
           content_html: string | null
           memo: string | null
+          status: string
+          excerpt: string | null
+          cover_alt: string | null
+          content_updated_date: string | null
           created_at: string
           updated_at: string
         }
@@ -326,6 +330,10 @@ export interface Database {
           external_url?: string | null
           content_html?: string | null
           memo?: string | null
+          status?: string
+          excerpt?: string | null
+          cover_alt?: string | null
+          content_updated_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -348,6 +356,10 @@ export interface Database {
           external_url?: string | null
           content_html?: string | null
           memo?: string | null
+          status?: string
+          excerpt?: string | null
+          cover_alt?: string | null
+          content_updated_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -368,6 +380,36 @@ export interface Database {
           article_id?: string
           related_article_id?: string
           sort_order?: number
+        }
+        Relationships: []
+      }
+      article_faqs: {
+        Row: {
+          id: string
+          article_id: string
+          question: string
+          answer: string
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          article_id: string
+          question: string
+          answer: string
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          article_id?: string
+          question?: string
+          answer?: string
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
