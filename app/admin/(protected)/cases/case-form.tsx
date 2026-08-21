@@ -42,8 +42,6 @@ export type CaseValues = {
   description_html: string | null
   detail_html: string | null
   note: string | null
-  specification_type: string
-  specification_description: string | null
   case_code: string
   stock_quantity: number | null
   safety_stock: number | null
@@ -132,13 +130,6 @@ export function CaseForm({
   const [publishEnd, setPublishEnd] = React.useState(toDateInput(caseItem?.publish_end ?? null))
 
   const [status, setStatus] = React.useState(caseItem?.status ?? "display")
-
-  const [specificationType, setSpecificationType] = React.useState(
-    caseItem?.specification_type ?? "",
-  )
-  const [specificationDescription, setSpecificationDescription] = React.useState(
-    caseItem?.specification_description ?? "",
-  )
 
   const [caseCode, setCaseCode] = React.useState(caseItem?.case_code ?? "")
 
@@ -276,8 +267,6 @@ export function CaseForm({
     fd.set("publish_start", publishStart)
     fd.set("publish_end", publishEnd)
     fd.set("status", status)
-    fd.set("specification_type", specificationType)
-    fd.set("specification_description", specificationDescription)
     fd.set("case_code", caseCode)
     fd.set("stock_quantity", stockQuantity)
     fd.set("safety_stock", safetyStock)
@@ -664,38 +653,6 @@ export function CaseForm({
                 </option>
               ))}
             </select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 規格 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">規格</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="specification_type">
-              <Req />
-              規格種類
-            </Label>
-            <Input
-              id="specification_type"
-              value={specificationType}
-              onChange={(e) => setSpecificationType(e.target.value)}
-              placeholder="例如：單一規格 / 多規格"
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="specification_description">規格簡述</Label>
-            <Textarea
-              id="specification_description"
-              value={specificationDescription}
-              onChange={(e) => setSpecificationDescription(e.target.value)}
-              placeholder="選填"
-              rows={2}
-            />
           </div>
         </CardContent>
       </Card>

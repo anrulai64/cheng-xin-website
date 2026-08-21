@@ -112,8 +112,6 @@ export default async function EditCasePage({
     description_html: caseItem.description_html,
     detail_html: caseItem.detail_html,
     note: caseItem.note,
-    specification_type: caseItem.specification_type,
-    specification_description: caseItem.specification_description,
     case_code: caseItem.case_code,
     stock_quantity: caseItem.stock_quantity,
     safety_stock: caseItem.safety_stock,
