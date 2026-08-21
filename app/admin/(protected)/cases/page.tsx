@@ -30,9 +30,14 @@ export default async function CasesPage({
   if (query) {
     listQuery = listQuery.ilike("name", `%${query}%`)
   }
+  // Admin management ordering is intentionally separate from public display
+  // ordering (which uses category-scoped sort_order). Newest first so a newly
+  // created or duplicated case is immediately visible at the top of the list,
+  // regardless of its sort_order. Does NOT affect /admin/cases/sort or any
+  // public query — both continue to use sort_order.
   listQuery = listQuery
-    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, to)
 
   const { data, count, error } = await listQuery

@@ -574,6 +574,10 @@ export async function bulkDeleteCases(ids: string[]): Promise<BulkResult> {
  *   - slug      : null (admin sets a real slug when editing)
  *   - case_code : internal, guaranteed-unique temporary value, clearly marked
  *                 as a copy (COPY-<timestamp>-<random>) — see final report
+ *   - status    : ALWAYS "offline" (下架), regardless of the original's status.
+ *                 This is intentional safety behavior — a duplicate must never
+ *                 be publicly visible until the admin reviews/edits it and
+ *                 manually republishes. Never copy original.status here.
  * Storage images, case_images rows, and related-case links are intentionally
  * NOT copied in this STEP.
  */
@@ -635,7 +639,8 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
         is_recommended: original.is_recommended,
         publish_start: original.publish_start,
         publish_end: original.publish_end,
-        status: original.status,
+        // Intentional exception: always offline, never copy original.status.
+        status: "offline",
         description_html: original.description_html,
         detail_html: original.detail_html,
         note: original.note,
