@@ -250,7 +250,7 @@ export interface Database {
           seo_keywords: string | null
           seo_description: string | null
           head_code: string | null
-          slug: string | null
+          slug: string
           image_url: string | null
           sort_order: number
           created_at: string
@@ -263,7 +263,7 @@ export interface Database {
           seo_keywords?: string | null
           seo_description?: string | null
           head_code?: string | null
-          slug?: string | null
+          slug: string
           image_url?: string | null
           sort_order?: number
           created_at?: string
@@ -276,7 +276,7 @@ export interface Database {
           seo_keywords?: string | null
           seo_description?: string | null
           head_code?: string | null
-          slug?: string | null
+          slug?: string
           image_url?: string | null
           sort_order?: number
           created_at?: string
@@ -287,13 +287,13 @@ export interface Database {
       articles: {
         Row: {
           id: string
-          category_id: string | null
+          category_id: string
           title: string
           seo_title: string | null
           seo_keywords: string | null
           seo_description: string | null
           head_code: string | null
-          slug: string | null
+          slug: string
           video_url: string | null
           cover_image_url: string | null
           publish_date: string
@@ -313,13 +313,13 @@ export interface Database {
         }
         Insert: {
           id?: string
-          category_id?: string | null
+          category_id: string
           title: string
           seo_title?: string | null
           seo_keywords?: string | null
           seo_description?: string | null
           head_code?: string | null
-          slug?: string | null
+          slug: string
           video_url?: string | null
           cover_image_url?: string | null
           publish_date?: string
@@ -339,13 +339,13 @@ export interface Database {
         }
         Update: {
           id?: string
-          category_id?: string | null
+          category_id?: string
           title?: string
           seo_title?: string | null
           seo_keywords?: string | null
           seo_description?: string | null
           head_code?: string | null
-          slug?: string | null
+          slug?: string
           video_url?: string | null
           cover_image_url?: string | null
           publish_date?: string
