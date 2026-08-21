@@ -24,7 +24,7 @@ export default async function CasesPage({
   let listQuery = supabase
     .from("case_items")
     .select(
-      "id, name, case_code, publish_start, publish_end, status, specification_type, category_id",
+      "id, name, case_code, publish_start, publish_end, status, category_id",
       { count: "exact" },
     )
   if (query) {
@@ -77,7 +77,6 @@ export default async function CasesPage({
     publish_start: r.publish_start,
     publish_end: r.publish_end,
     status: r.status,
-    specification_type: r.specification_type,
     categoryName: categoryMap.get(r.category_id) ?? "—",
   }))
 

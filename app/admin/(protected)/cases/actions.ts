@@ -48,8 +48,6 @@ type CasePayload = {
   description_html: string | null
   detail_html: string
   note: string | null
-  specification_type: string
-  specification_description: string | null
   case_code: string
   stock_quantity: number | null
   safety_stock: number | null
@@ -92,12 +90,10 @@ function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: 
   const category_id = str(form, "category_id")
   const name = str(form, "name")
   const detail_html = str(form, "detail_html")
-  const specification_type = str(form, "specification_type")
   const case_code = str(form, "case_code")
 
   if (!category_id) return { ok: false, error: "請選擇分類。" }
   if (!name) return { ok: false, error: "請輸入案例名稱。" }
-  if (!specification_type) return { ok: false, error: "請輸入規格種類。" }
   if (!case_code) return { ok: false, error: "請輸入案例編號。" }
   // Reject visually-empty HTML (e.g. "<p></p>", "<br>") for the required field.
   if (isHtmlContentEmpty(detail_html)) return { ok: false, error: "請輸入案例詳細內容。" }
@@ -151,8 +147,6 @@ function parseCaseForm(form: FormData): { ok: true; data: CasePayload } | { ok: 
       description_html: nullableStr(form, "description_html"),
       detail_html,
       note: nullableStr(form, "note"),
-      specification_type,
-      specification_description: nullableStr(form, "specification_description"),
       case_code,
       stock_quantity,
       safety_stock,
@@ -250,7 +244,16 @@ export async function createCase(form: FormData): Promise<ActionResult> {
 
     const { data, error } = await supabase
       .from("case_items")
-      .insert({ ...parsed.data, slug, sort_order: nextSortOrder })
+      .insert({
+        ...parsed.data,
+        slug,
+        sort_order: nextSortOrder,
+        // 規格 (specification_type) is retired from the application layer
+        // (STEP 14H) but the column is still `not null` with no DB default.
+        // Write a fixed empty value here only to satisfy that constraint —
+        // never sourced from user input.
+        specification_type: "",
+      })
       .select("id")
       .single()
 
@@ -644,8 +647,12 @@ export async function duplicateCase(id: string): Promise<ActionResult> {
         description_html: original.description_html,
         detail_html: original.detail_html,
         note: original.note,
-        specification_type: original.specification_type,
-        specification_description: original.specification_description,
+        // 規格 (specification_type) is retired from the application layer
+        // (STEP 14H): never copy the original's value. The column is still
+        // `not null` with no DB default, so write a fixed empty value only to
+        // satisfy that constraint; specification_description is nullable and
+        // simply omitted (stays null on the new row).
+        specification_type: "",
         case_code: copyCode,
         stock_quantity: original.stock_quantity,
         safety_stock: original.safety_stock,

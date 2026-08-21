@@ -30,7 +30,6 @@ export type CaseRow = {
   publish_start: string | null
   publish_end: string | null
   status: string
-  specification_type: string
   categoryName: string
 }
 
@@ -319,7 +318,6 @@ export function CaseListTable({
                 <th className="px-3 py-2.5 font-medium">上架日期</th>
                 <th className="px-3 py-2.5 font-medium">下架日期</th>
                 <th className="px-3 py-2.5 font-medium">狀態</th>
-                <th className="px-3 py-2.5 font-medium">規格</th>
                 <th className="print-hide w-16 px-3 py-2.5 font-medium">修改</th>
                 <th className="print-hide w-20 px-3 py-2.5 font-medium">刪除</th>
               </tr>
@@ -362,7 +360,6 @@ export function CaseListTable({
                   <td className="px-3 py-2.5">
                     <StatusBadge status={row.status} />
                   </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{row.specification_type}</td>
                   <td className="print-hide px-3 py-2.5">
                     <Link
                       href={`/admin/cases/${row.id}/edit`}
