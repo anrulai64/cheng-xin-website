@@ -26,7 +26,10 @@ const NAV: (NavItem | NavGroup)[] = [
   },
   {
     label: "文章管理",
-    items: [{ label: "文章分類", href: "/admin/articles/categories" }],
+    items: [
+      { label: "文章列表", href: "/admin/articles" },
+      { label: "文章分類", href: "/admin/articles/categories" },
+    ],
   },
 ]
 
@@ -44,6 +47,10 @@ function useIsActive() {
       if (href === "/admin/cases") {
         // "案例管理" is the cases index; don't highlight it on nested routes.
         return pathname === "/admin/cases"
+      }
+      if (href === "/admin/articles") {
+        // "文章列表" is the articles index; don't highlight it on /admin/articles/categories.
+        return pathname === "/admin/articles"
       }
       return pathname === href || pathname.startsWith(`${href}/`)
     },
