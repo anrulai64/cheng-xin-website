@@ -120,6 +120,14 @@ export function CaseListTable({
         setMessage({ type: "error", text: result.error })
         return
       }
+      // Duplicate always starts as 下架 (offline); take the admin straight to
+      // the edit page for the new case so they can review and republish it.
+      // Only navigate when a valid new id was actually returned.
+      if (result.id && result.id.trim() !== "") {
+        router.push(`/admin/cases/${result.id}/edit`)
+        return
+      }
+      // Defensive fallback: duplicate reported success but no id came back.
       setMessage({ type: "ok", text: "已建立複製案例，請至列表編輯後再上架。" })
       router.refresh()
     })
@@ -418,7 +426,7 @@ export function CaseListTable({
           <PageLink href={pageHref(page - 1)} disabled={page <= 1} label="上一頁">
             <ChevronLeft className="size-4" />
           </PageLink>
-          <PageLink href={pageHref(page + 1)} disabled={page >= totalPages} label="下一頁">
+          <PageLink href={pageHref(page + 1)} disabled={page >= totalPages} label="���一頁">
             <ChevronRight className="size-4" />
           </PageLink>
           <PageLink href={pageHref(totalPages)} disabled={page >= totalPages} label="最終頁">
