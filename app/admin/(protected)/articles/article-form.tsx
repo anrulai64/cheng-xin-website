@@ -49,6 +49,14 @@ export function ArticleForm({
 
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
+  const errorRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!error) return
+
+    errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    errorRef.current?.focus({ preventScroll: true })
+  }, [error])
 
   const publicUrlPreview = slug.trim() ? `/blog/${slug.trim().toLowerCase()}` : "/blog/{slug}"
 
@@ -92,7 +100,9 @@ export function ArticleForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {error ? (
         <div
+          ref={errorRef}
           role="alert"
+          tabIndex={-1}
           className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
