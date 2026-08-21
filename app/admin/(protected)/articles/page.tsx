@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
@@ -65,15 +67,9 @@ export default async function ArticlesPage() {
           <h1 className="font-heading text-2xl font-bold text-foreground">文章管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">管理網站文章內容、發布狀態與 SEO 設定。</p>
         </div>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title="文章建立功能將於後續版本提供"
-          className={cn(buttonVariants({ size: "default" }))}
-        >
+        <Link href="/admin/articles/new" className={cn(buttonVariants({ size: "default" }))}>
           新增文章
-        </button>
+        </Link>
       </div>
 
       {hasError ? (
