@@ -199,7 +199,7 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
 
   return (
     <>
-      <article className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+      <article className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
         <Breadcrumbs
           items={[
             { name: "首頁", href: "/" },
@@ -208,75 +208,71 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
           ]}
         />
 
-        {(category || location) && (
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            {category && (
-              <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                {category}
-              </span>
-            )}
-            {location && (
-              <span className="text-sm font-medium text-secondary">{location}</span>
-            )}
+        <div className="mt-8 grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-12">
+          <div className="order-2 min-w-0 lg:order-1">
+            {/* CMS gallery behavior remains owned entirely by CaseGallery. */}
+            <CaseGallery images={gallery} caseName={caseItem.name} />
           </div>
-        )}
 
-        <h1 className="mt-4 text-balance font-serif text-3xl font-bold text-primary sm:text-4xl">
-          {caseItem.name}
-        </h1>
+          <div className="order-1 min-w-0 lg:order-2 lg:pt-2">
+            {(category || location) && (
+              <div className="flex flex-wrap items-center gap-3">
+                {category && (
+                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                    {category}
+                  </span>
+                )}
+                {location && (
+                  <span className="text-sm font-medium text-secondary">{location}</span>
+                )}
+              </div>
+            )}
 
-        {/*
-          Full CMS gallery: large current image + thumbnail navigation +
-          lightbox. Owns selected-image state client-side. Zero images falls
-          back to a placeholder large image (handled inside CaseGallery).
-        */}
-        <CaseGallery images={gallery} caseName={caseItem.name} />
+            <h1 className="mt-4 text-balance font-serif text-3xl font-bold text-primary sm:text-4xl">
+              {caseItem.name}
+            </h1>
 
-        {/*
-          案例基本資料: clean information grid. Rendered only when at least one
-          field is present; otherwise hidden entirely (no empty card). The CTA
-          action area below renders regardless so incomplete historical cases
-          still expose 我要驗屋 / LINE 預約.
-        */}
-        {basicInfo.length > 0 && (
-          <section className="mt-10 rounded-2xl border border-border bg-card p-6">
-            <h2 className="text-lg font-bold text-primary">案例基本資料</h2>
-            <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
-              {basicInfo.map((row) => (
-                <div
-                  key={row.label}
-                  className="flex items-baseline gap-4 border-b border-border/60 pb-3"
+            {basicInfo.length > 0 && (
+              <section className="mt-8 rounded-2xl border border-border bg-card p-6">
+                <h2 className="text-lg font-bold text-primary">案例基本資料</h2>
+                <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-1">
+                  {basicInfo.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-baseline gap-4 border-b border-border/60 pb-3"
+                    >
+                      <dt className="w-16 shrink-0 text-sm font-medium text-muted-foreground">
+                        {row.label}
+                      </dt>
+                      <dd className="text-sm font-semibold text-foreground">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
+
+            {/* Public CTA buttons (not per-case fields). */}
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+              <Link
+                href="/contact"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <ClipboardCheck className="size-4" />
+                我要驗屋
+              </Link>
+              {lineUrl && (
+                <a
+                  href={lineUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-secondary bg-secondary/10 px-6 py-3 text-sm font-semibold text-secondary transition-colors hover:bg-secondary/20"
                 >
-                  <dt className="w-16 shrink-0 text-sm font-medium text-muted-foreground">
-                    {row.label}
-                  </dt>
-                  <dd className="text-sm font-semibold text-foreground">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        )}
-
-        {/* Public CTA buttons (not per-case fields). */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href="/contact"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <ClipboardCheck className="size-4" />
-            我要驗屋
-          </Link>
-          {lineUrl && (
-            <a
-              href={lineUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-secondary bg-secondary/10 px-6 py-3 text-sm font-semibold text-secondary transition-colors hover:bg-secondary/20"
-            >
-              <MessageCircle className="size-4" />
-              LINE 預約
-            </a>
-          )}
+                  <MessageCircle className="size-4" />
+                  LINE 預約
+                </a>
+              )}
+            </div>
+          </div>
         </div>
 
         {hasIntro && (
@@ -286,13 +282,8 @@ async function CmsCaseView({ caseItem }: { caseItem: PublicCaseDetail }) {
         )}
 
         {/*
-          「案例介紹 / 常見問題」section.
-          案例介紹 → THIS case's detail_html (case_items.detail_html).
-          常見問題 → shared visible case_faqs.
-          Rendered only when at least one side has content; the tab component
-          drops any side that is empty. detail_html is rendered ONLY here now
-          (no separate body block above) to avoid duplicate content.
-          NOT applied to LegacyCaseView.
+          「案例介紹 / 常見問題」section remains below the complete top
+          two-column area. detail_html is rendered only here to avoid duplication.
         */}
         {hasSharedInfo ? (
           <CaseInfoTabs introHtml={detailTabHtml} faqs={cleanFaqs} />
@@ -388,7 +379,7 @@ function LegacyCaseView({ item }: { item: LegacyCase }) {
 
         <div className="mt-10 rounded-2xl bg-accent/50 p-6 leading-relaxed text-muted-foreground">
           <p>
-            這個案例再次說明專業驗屋的重要性。許多缺失在交屋當下不易察覺，卻可能在入住後逐漸顯現並造成困擾。
+            這個案例再次說明專業驗屋的重要性。許多��失在交屋當下不易察覺，卻可能在入住後逐漸顯現並造成困擾。
             誠昕驗屋透過專業儀器與系統化檢測，協助屋主在第一時間掌握問題並要求改善，避免後續爭議與額外負擔。
           </p>
         </div>
