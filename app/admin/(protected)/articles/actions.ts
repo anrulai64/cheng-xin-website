@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
+import { sanitizeArticleContentHtml } from "./sanitize"
 
 const LIST_PATH = "/admin/articles"
 
@@ -29,16 +30,33 @@ type Fields = {
 // Detects Tiptap's "editor is empty" HTML representations (e.g. "",
 // "<p></p>", "<p><br></p>", or whitespace variants of these) so genuinely
 // empty content is stored as NULL instead of meaningless empty markup.
-// This is NOT a sanitizer and makes no claim about HTML safety — it only
-// recognizes a small fixed set of known-empty shapes and otherwise passes
-// the string through unchanged. See STEP A5-B scope notes.
+// This is a cheap pre-check only — it is NOT the security boundary. The
+// actual security boundary is sanitizeArticleContentHtml() (./sanitize.ts),
+// applied below to every value that passes this pre-check.
 const EMPTY_CONTENT_HTML_PATTERN = /^(?:<p>\s*(?:<br\s*\/?>)?\s*<\/p>\s*)*$/i
 
+/**
+ * Normalizes + sanitizes raw content_html from the Admin RichText editor
+ * before persistence. Pipeline:
+ *   1. Detect genuinely editor-empty raw HTML -> NULL (skips sanitization
+ *      entirely for the common empty case).
+ *   2. Otherwise, run the untrusted HTML through the server-side allowlist
+ *      sanitizer (sanitizeArticleContentHtml).
+ *   3. If sanitization strips everything meaningful (e.g. disallowed-only
+ *      input like "<script>alert(1)</script>") the result is empty ->
+ *      NULL, so we never store a dangerous or meaningless body.
+ *   4. Otherwise, store the sanitized HTML string.
+ */
 function normalizeContentHtml(raw: string): string | null {
   const trimmed = raw.trim()
   if (trimmed === "") return null
   if (EMPTY_CONTENT_HTML_PATTERN.test(trimmed)) return null
-  return raw
+
+  const sanitized = sanitizeArticleContentHtml(raw)
+  if (sanitized.trim() === "" || EMPTY_CONTENT_HTML_PATTERN.test(sanitized.trim())) {
+    return null
+  }
+  return sanitized
 }
 
 /** Read + normalize the Article form fields. Returns a field-level error string on failure. */
