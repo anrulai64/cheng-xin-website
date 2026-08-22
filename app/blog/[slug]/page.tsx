@@ -9,13 +9,20 @@ import { blogPosts, blogContent, siteConfig } from "@/lib/site-data"
 import { getPublicCmsArticleBySlug, type PublicArticleDetail } from "@/lib/articles/public"
 import { ArticleContent } from "@/components/articles/article-content"
 
-// Prebuild the six existing legacy Blog slugs so their URLs keep SSG
-// behavior. `dynamicParams` is intentionally left at its Next.js default
-// (true) — NOT set to false — so a CMS Article's slug can resolve at request
-// time without a redeploy or a generateStaticParams entry (STEP A6-A §18).
-export function generateStaticParams() {
-  return blogPosts.map((p) => ({ slug: p.slug }))
-}
+// STEP A6-A-FIX2: CMS Article visibility (status, start_date, end_date) must
+// be evaluated fresh on every request. After A6-A-FIX removed the
+// cookies()-bound Supabase client, this route became eligible for Next.js's
+// static/ISR caching, which let a CMS slug's page get generated once and
+// keep serving stale content after an Admin edit (published -> draft/offline,
+// schedule window change, or delete). Forcing request-time dynamic rendering
+// is the simplest correct fix — no revalidation, tags, or cache-invalidation
+// plumbing required. `generateStaticParams` is removed: with the whole route
+// forced dynamic, prebuilding the six legacy slugs would provide no SSG
+// benefit and would misleadingly imply otherwise. The six legacy Blog
+// articles are unchanged in data/content; they now render dynamically like
+// every other slug on this route, with legacy lookup still short-circuiting
+// before any CMS query runs.
+export const dynamic = "force-dynamic"
 
 export async function generateMetadata({
   params,
