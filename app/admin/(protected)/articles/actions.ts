@@ -132,7 +132,12 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
   await requireAdmin()
   const supabase = await createClient()
 
-  const fields = readFields(formData)
+  let fields: Fields | { error: string }
+  try {
+    fields = readFields(formData)
+  } catch {
+    return { ok: false, error: "建立文章失敗，請稍後再試。" }
+  }
   if ("error" in fields) return { ok: false, error: fields.error }
 
   // Server-side category existence check — never trust the browser <select>.
@@ -195,7 +200,12 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
   await requireAdmin()
   const supabase = await createClient()
 
-  const fields = readFields(formData)
+  let fields: Fields | { error: string }
+  try {
+    fields = readFields(formData)
+  } catch {
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+  }
   if ("error" in fields) return { ok: false, error: fields.error }
 
   // Confirm the Article still exists before validating further — avoids

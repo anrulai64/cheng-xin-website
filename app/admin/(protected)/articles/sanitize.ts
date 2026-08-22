@@ -39,14 +39,14 @@ const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
 
 /**
  * Sanitizes Article `content_html` against the locked RichText toolbar
- * allowlist. Returns `""` for null/undefined/non-string input or if
- * sanitization throws (fail closed — never persist raw HTML on error).
+ * allowlist. Returns `""` for null/undefined/non-string input. Unexpected
+ * sanitizer errors are allowed to throw so the caller can abort the save;
+ * raw HTML is never used as a fallback.
  */
 export function sanitizeArticleContentHtml(dirty: string | null | undefined): string {
   if (!dirty || typeof dirty !== "string") return ""
 
-  try {
-    return sanitizeHtml(dirty, {
+  return sanitizeHtml(dirty, {
       allowedTags: ARTICLE_ALLOWED_TAGS,
       allowedAttributes: ARTICLE_ALLOWED_ATTRIBUTES,
       // No URL-bearing tags/attributes are allowed above, so no scheme
@@ -59,12 +59,8 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
       // against arbitrary CSS surviving via some other path.
       allowedStyles: {},
       // Disallow HTML comments (can hide conditional/legacy payloads).
-      parser: {
-        lowerCaseAttributeNames: true,
-      },
-    })
-  } catch {
-    // Fail closed: never fall back to the raw, unsanitized HTML.
-    return ""
-  }
+    parser: {
+      lowerCaseAttributeNames: true,
+    },
+  })
 }
