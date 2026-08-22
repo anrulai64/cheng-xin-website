@@ -229,3 +229,51 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
   revalidatePath(LIST_PATH)
   return { ok: true, id }
 }
+
+// FK audit (see scripts/002_articles_schema.sql, scripts/012_article_cms_v1_schema.sql):
+//   - article_faqs.article_id -> articles(id) ON DELETE CASCADE
+//   - article_related_articles.article_id -> articles(id) ON DELETE CASCADE
+//   - article_related_articles.related_article_id -> articles(id) ON DELETE CASCADE
+// All three child references CASCADE. Deleting the Article row directly is
+// therefore safe and sufficient — no manual FAQ / related-article row
+// deletion is needed here, and none is performed.
+export async function deleteArticle(id: string): Promise<ActionResult> {
+  await requireAdmin()
+  const supabase = await createClient()
+
+  // Minimal existence check — never load the full Article body/metadata.
+  const { data: existing, error: existingError } = await supabase
+    .from("articles")
+    .select("id")
+    .eq("id", id)
+    .limit(1)
+
+  if (existingError) {
+    return { ok: false, error: "刪除文章失敗，請稍後再試。" }
+  }
+  if (!existing || existing.length === 0) {
+    return { ok: false, error: "文章不存在或已被刪除。" }
+  }
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("articles")
+    .delete()
+    .eq("id", id)
+    .select("id")
+
+  if (deleteError) {
+    if (deleteError.code === "23503") {
+      // All known child FKs CASCADE (see audit note above), so a 23503 here
+      // would indicate an unexpected reference this code does not know
+      // about. Do not guess which table caused it.
+      return { ok: false, error: "文章目前仍被其他資料使用，暫時無法刪除。" }
+    }
+    return { ok: false, error: "刪除文章失敗，請稍後再試。" }
+  }
+  if (!deleted || deleted.length === 0) {
+    return { ok: false, error: "文章不存在或已被刪除。" }
+  }
+
+  revalidatePath(LIST_PATH)
+  return { ok: true, id }
+}
