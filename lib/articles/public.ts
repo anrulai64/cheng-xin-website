@@ -1,18 +1,28 @@
 import "server-only"
 
-import { createClient } from "@/lib/supabase/server"
+import { createPublicClient } from "@/lib/supabase/public"
 import { getTaipeiTodayDateString, isArticlePubliclyVisible } from "@/lib/articles/visibility"
 
 /**
- * PUBLIC CMS Article query layer (read-only), STEP A6-A.
+ * PUBLIC CMS Article query layer (read-only), STEP A6-A (fixed in A6-A-FIX).
  *
- * Mirrors the established lib/case-studies/queries.ts conventions: reuses the
- * anon/publishable Supabase server client (no service_role, no
- * requireAdmin()), exposes narrow public-facing types, and keeps its
- * visibility filter in lockstep with the "articles_select_public" RLS policy
- * (scripts/013_article_cms_v1_security.sql) — RLS remains authoritative;
- * this filter (plus the final independent check below) makes the intent
- * explicit and adds defense in depth.
+ * Mirrors the established lib/case-studies/queries.ts conventions: reuses an
+ * anon/publishable Supabase client (no service_role, no requireAdmin()),
+ * exposes narrow public-facing types, and keeps its visibility filter in
+ * lockstep with the "articles_select_public" RLS policy
+ * (scripts/013_article_cms_v1_security.sql, refined for timezone in
+ * scripts/017_article_cms_v1_public_visibility_timezone.sql) — RLS remains
+ * authoritative; this filter (plus the final independent check below) makes
+ * the intent explicit and adds defense in depth.
+ *
+ * A6-A-FIX: uses `lib/supabase/public.ts` (`createPublicClient`) rather than
+ * `lib/supabase/server.ts`. The latter calls `cookies()` (a Next.js dynamic
+ * API) to support authenticated Admin requests; that dependency forced this
+ * route into per-request dynamic rendering and broke the six statically
+ * prerendered legacy `/blog/[slug]` paths that share this route file
+ * (DYNAMIC_SERVER_USAGE in production). This query layer is public-read-only
+ * and never needs a session, so it now uses the anon-only, dynamic-API-free
+ * client instead — still governed by RLS, never service_role.
  *
  * SCOPE LOCK (STEP A6-A): only the fields needed for the very first public
  * CMS Article read path are selected/returned here. No cover image, FAQ,
@@ -60,7 +70,7 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
   const trimmed = slug?.trim()
   if (!trimmed) return null
 
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const today = getTaipeiTodayDateString()
 
   const { data, error } = await supabase
