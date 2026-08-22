@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Clock, ArrowLeft, ArrowRight } from "lucide-react"
 import { PageHero, CtaSection } from "@/components/shared"
-import { ArticleSchema } from "@/components/structured-data"
+import { ArticleSchema, BreadcrumbSchema } from "@/components/structured-data"
 import { blogPosts, blogContent, siteConfig } from "@/lib/site-data"
 import { getPublicCmsArticleBySlug, type PublicArticleDetail } from "@/lib/articles/public"
 import { ArticleContent } from "@/components/articles/article-content"
@@ -136,7 +136,8 @@ function LegacyBlogPost({
       <ArticleSchema
         title={post.title}
         description={post.excerpt}
-        date={post.date}
+        datePublished={post.date}
+        dateModified={post.date}
         image={post.image}
         author={post.author}
         url={`/blog/${post.slug}`}
@@ -256,8 +257,26 @@ function LegacyBlogPost({
  * or duplicates sanitizer logic itself.
  */
 function CmsBlogPost({ article }: { article: PublicArticleDetail }) {
+  // Same semantic fallback used by generateMetadata (STEP A6-B §9): trimmed
+  // seo_description when non-empty, otherwise excerpt. No divergent contract.
+  const resolvedDescription = article.seo_description?.trim() ? article.seo_description.trim() : article.excerpt ?? ""
+
   return (
     <>
+      <ArticleSchema
+        title={article.title}
+        description={resolvedDescription}
+        datePublished={article.publish_date}
+        author="誠昕驗屋團隊"
+        url={`/blog/${article.slug}`}
+      />
+      <BreadcrumbSchema
+        items={[
+          { name: "首頁", url: "/" },
+          { name: "文章專區", url: "/blog" },
+          { name: article.title, url: `/blog/${article.slug}` },
+        ]}
+      />
       <PageHero
         title={article.title}
         breadcrumbs={[

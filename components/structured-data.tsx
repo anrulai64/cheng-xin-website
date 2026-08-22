@@ -84,15 +84,19 @@ export function FaqSchema({ faqs }: { faqs: { q: string; a: string }[] }) {
 export function ArticleSchema({
   title,
   description,
-  date,
+  datePublished,
+  dateModified,
   image,
   author,
   url,
 }: {
   title: string
   description: string
-  date: string
-  image: string
+  datePublished: string
+  /** Omitted from the emitted JSON-LD entirely when not provided. */
+  dateModified?: string
+  /** Omitted from the emitted JSON-LD entirely when not provided. */
+  image?: string
   author: string
   url: string
 }) {
@@ -101,9 +105,9 @@ export function ArticleSchema({
     "@type": "Article",
     headline: title,
     description,
-    image: `${siteConfig.url}${image}`,
-    datePublished: date,
-    dateModified: date,
+    ...(image ? { image: `${siteConfig.url}${image}` } : {}),
+    datePublished,
+    ...(dateModified ? { dateModified } : {}),
     author: { "@type": "Organization", name: author },
     publisher: {
       "@type": "Organization",
