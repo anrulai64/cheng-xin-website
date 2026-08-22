@@ -35,10 +35,7 @@ export type ArticleInitialValues = {
   seo_title: string | null
   seo_keywords: string | null
   seo_description: string | null
-  // Optional so the Edit page can keep compiling without supplying it yet.
-  // Wiring the actual read/persist path for content_html is A5-B's scope —
-  // see app/admin/(protected)/articles/rich-text-editor.tsx.
-  content_html?: string | null
+  content_html: string | null
 }
 
 const LIST_PATH = "/admin/articles"
@@ -78,9 +75,6 @@ export function ArticleForm({
   const [startDate, setStartDate] = React.useState(initialValues?.start_date ?? "")
   const [endDate, setEndDate] = React.useState(initialValues?.end_date ?? "")
   const [excerpt, setExcerpt] = React.useState(initialValues?.excerpt ?? "")
-  // Client-side only in A5-A: not read from Supabase beyond what
-  // initialValues already carries, and not submitted in FormData below.
-  // Persistence is A5-B's scope.
   const [contentHtml, setContentHtml] = React.useState(initialValues?.content_html ?? "")
   const [seoTitle, setSeoTitle] = React.useState(initialValues?.seo_title ?? "")
   const [seoKeywords, setSeoKeywords] = React.useState(initialValues?.seo_keywords ?? "")
@@ -113,6 +107,7 @@ export function ArticleForm({
     formData.set("start_date", startDate)
     formData.set("end_date", endDate)
     formData.set("excerpt", excerpt)
+    formData.set("content_html", contentHtml)
     formData.set("seo_title", seoTitle)
     formData.set("seo_keywords", seoKeywords)
     formData.set("seo_description", seoDescription)
@@ -293,9 +288,7 @@ export function ArticleForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5">
           <RichTextEditor value={contentHtml} onChange={setContentHtml} ariaLabel="文章內容編輯器" />
-          <p className="text-xs text-muted-foreground">
-            文章內容目前為選填，儲存後尚不會寫入資料庫（此功能將於後續版本開放）。
-          </p>
+          <p className="text-xs text-muted-foreground">文章內容目前為選填，儲存後尚不會於公開網站顯示（此功能將於後續版本開放）。</p>
         </CardContent>
       </Card>
 

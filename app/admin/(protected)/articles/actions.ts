@@ -23,6 +23,22 @@ type Fields = {
   seo_title: string | null
   seo_keywords: string | null
   seo_description: string | null
+  content_html: string | null
+}
+
+// Detects Tiptap's "editor is empty" HTML representations (e.g. "",
+// "<p></p>", "<p><br></p>", or whitespace variants of these) so genuinely
+// empty content is stored as NULL instead of meaningless empty markup.
+// This is NOT a sanitizer and makes no claim about HTML safety — it only
+// recognizes a small fixed set of known-empty shapes and otherwise passes
+// the string through unchanged. See STEP A5-B scope notes.
+const EMPTY_CONTENT_HTML_PATTERN = /^(?:<p>\s*(?:<br\s*\/?>)?\s*<\/p>\s*)*$/i
+
+function normalizeContentHtml(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (trimmed === "") return null
+  if (EMPTY_CONTENT_HTML_PATTERN.test(trimmed)) return null
+  return raw
 }
 
 /** Read + normalize the Article form fields. Returns a field-level error string on failure. */
@@ -72,6 +88,12 @@ function readFields(formData: FormData): Fields | { error: string } {
     return { error: "請輸入文章摘要。" }
   }
 
+  // content_html remains optional (see A5-B §8) — the raw value (not the
+  // trimmed `str()` helper) is normalized so leading/trailing whitespace
+  // inside meaningful HTML is not altered.
+  const rawContentHtml = formData.get("content_html")
+  const content_html = normalizeContentHtml(typeof rawContentHtml === "string" ? rawContentHtml : "")
+
   return {
     title,
     category_id,
@@ -84,6 +106,7 @@ function readFields(formData: FormData): Fields | { error: string } {
     seo_title: orNull(str("seo_title")),
     seo_keywords: orNull(str("seo_keywords")),
     seo_description: orNull(str("seo_description")),
+    content_html,
   }
 }
 
@@ -134,6 +157,7 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
       seo_title: fields.seo_title,
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,
+      content_html: fields.content_html,
     })
     .select("id")
     .single()
@@ -212,6 +236,7 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
       seo_title: fields.seo_title,
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,
+      content_html: fields.content_html,
     })
     .eq("id", id)
     .select("id")

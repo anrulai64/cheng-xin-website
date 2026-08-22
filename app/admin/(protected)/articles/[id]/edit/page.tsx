@@ -25,7 +25,7 @@ export default async function EditArticlePage({
   const { data: article, error: articleError } = await supabase
     .from("articles")
     .select(
-      "id, title, category_id, slug, status, publish_date, start_date, end_date, excerpt, seo_title, seo_keywords, seo_description",
+      "id, title, category_id, slug, status, publish_date, start_date, end_date, excerpt, seo_title, seo_keywords, seo_description, content_html",
     )
     .eq("id", id)
     .single()
@@ -55,6 +55,7 @@ export default async function EditArticlePage({
     seo_title: article.seo_title,
     seo_keywords: article.seo_keywords,
     seo_description: article.seo_description,
+    content_html: article.content_html,
   }
 
   return (
