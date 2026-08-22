@@ -44,6 +44,14 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "offline", label: "已下架" },
 ]
 
+function getLocalToday() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, "0")
+  const day = String(today.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 export function ArticleForm({
   mode,
   categories,
@@ -59,7 +67,9 @@ export function ArticleForm({
   const [categoryId, setCategoryId] = React.useState(initialValues?.category_id ?? "")
   const [slug, setSlug] = React.useState(initialValues?.slug ?? "")
   const [status, setStatus] = React.useState(initialValues?.status ?? "draft")
-  const [publishDate, setPublishDate] = React.useState(initialValues?.publish_date ?? "")
+  const [publishDate, setPublishDate] = React.useState(
+    initialValues?.publish_date ?? (mode === "create" ? getLocalToday() : ""),
+  )
   const [startDate, setStartDate] = React.useState(initialValues?.start_date ?? "")
   const [endDate, setEndDate] = React.useState(initialValues?.end_date ?? "")
   const [excerpt, setExcerpt] = React.useState(initialValues?.excerpt ?? "")
