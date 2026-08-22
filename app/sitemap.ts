@@ -4,11 +4,22 @@ import {
   getPublicCaseSitemapEntries,
   getPublicCaseCategorySitemapEntries,
 } from "@/lib/case-studies/queries"
+import { getPublicArticleSitemapEntries } from "@/lib/articles/public"
 
-// This sitemap reads live Case Study data from Supabase (public anon RLS), so
-// the route is dynamic. Revalidate hourly to avoid a DB hit on every crawl
-// while keeping CMS URLs reasonably fresh.
-export const revalidate = 3600
+// This sitemap reads live Case Study AND CMS Article data from Supabase
+// (public anon RLS). STEP A6-E: rendered per-request (force-dynamic) rather
+// than build-time ISR. Two reasons:
+//  1. Correctness (§15): CMS Article visibility flips with status and the
+//     Asia/Taipei start_date/end_date window with no redeploy, so a cached
+//     sitemap would go stale. force-dynamic re-evaluates "today" every crawl.
+//     This matches /blog and /blog/[slug], which are already force-dynamic.
+//  2. The route must not be prerendered at build time, where Supabase env
+//     vars are absent — that build-time read is what previously failed and
+//     was only tolerated because the Case block swallowed it. The CMS Article
+//     read (§16) is intentionally NOT swallowed, so it must run at request
+//     time, when the anon Supabase client is properly configured.
+// This is a first-class Next.js route config, not a cookies()/headers() hack.
+export const dynamic = "force-dynamic"
 
 /** True only for a usable, non-blank slug (rejects null / "" / whitespace). */
 function hasUsableSlug(slug: string | null | undefined): slug is string {
@@ -60,6 +71,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }))
 
+  // CMS Article /blog/{slug} URLs (STEP A6-E) — additive to the six legacy
+  // Blog entries above, never a replacement. Legacy owns any shared slug:
+  // a CMS Article whose slug collides with a legacy post is excluded here so
+  // /blog/{slug} appears exactly once, keeping the legacy entry authoritative.
+  //
+  // Unlike the Case Study block below, a CMS Article read failure is NOT
+  // caught/omitted: getPublicArticleSitemapEntries() throws a sanitized error
+  // on DB failure and we let it surface, rather than silently fabricating
+  // "0 public Articles" and dropping every CMS URL from the sitemap (§16).
+  const legacyBlogSlugs = new Set(blogPosts.map((p) => p.slug))
+  const cmsArticleEntries = await getPublicArticleSitemapEntries()
+  const cmsBlogRoutes = cmsArticleEntries
+    .filter((a) => hasUsableSlug(a.slug) && !legacyBlogSlugs.has(a.slug))
+    .map((a) => ({
+      url: `${base}/blog/${a.slug.trim()}`,
+      lastModified: toLastModified(a.updated_at, null),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    }))
+
   // Case Study detail + category URLs come from Supabase only. A transient DB
   // failure must not take down the whole sitemap: on error we log server-side
   // and omit ONLY the dynamic Case entries (no legacy fallback URLs injected).
@@ -102,5 +133,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...caseRoutes,
     ...caseCategoryRoutes,
     ...blogRoutes,
+    ...cmsBlogRoutes,
   ]
 }

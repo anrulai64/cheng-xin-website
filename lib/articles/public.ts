@@ -196,3 +196,49 @@ export async function getPublicCmsArticleList(): Promise<PublicArticleListItem[]
     excerpt: row.excerpt,
   }))
 }
+
+/**
+ * PUBLIC CMS Article SITEMAP entry shape, STEP A6-E.
+ *
+ * The absolute minimum a sitemap URL needs: the slug (to build /blog/{slug})
+ * and updated_at (lastModified). No title/excerpt/SEO/cover/category fields —
+ * a sitemap never renders content. status/start_date/end_date are read only
+ * to run the visibility re-check and are deliberately NOT returned.
+ */
+export type PublicArticleSitemapEntry = {
+  slug: string
+  updated_at: string
+}
+
+/**
+ * All publicly visible CMS Articles as sitemap entries, ordered slug ASC for
+ * deterministic output (never relying on Supabase's unspecified row order).
+ *
+ * Reuses the exact same visibility contract as the Detail and Blog Index
+ * paths: query-level status + Asia/Taipei start_date/end_date window filter,
+ * THEN an independent per-row isArticlePubliclyVisible() re-check (defense in
+ * depth). publish_date never participates.
+ *
+ * DB-error philosophy (STEP A6-E §16): a query failure throws a sanitized
+ * error via assertNoError — it is NEVER silently coerced into an empty list,
+ * which would fabricate "0 public Articles" and drop every CMS URL from the
+ * sitemap. The caller must let this surface rather than swallow it to [].
+ */
+export async function getPublicArticleSitemapEntries(): Promise<PublicArticleSitemapEntry[]> {
+  const supabase = createPublicClient()
+  const today = getTaipeiTodayDateString()
+
+  const { data, error } = await supabase
+    .from("articles")
+    .select("slug, updated_at, status, start_date, end_date")
+    .eq("status", "published")
+    .or(`start_date.is.null,start_date.lte.${today}`)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+    .order("slug", { ascending: true })
+
+  assertNoError(error, "getPublicArticleSitemapEntries")
+
+  return (data ?? [])
+    .filter((row) => isArticlePubliclyVisible(row, today))
+    .map((row) => ({ slug: row.slug, updated_at: row.updated_at }))
+}
