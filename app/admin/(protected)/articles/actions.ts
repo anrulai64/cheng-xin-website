@@ -21,6 +21,11 @@ type Fields = {
   start_date: string | null
   end_date: string | null
   excerpt: string
+  // cover_alt: plain-text accessible alt for the cover image. Persisted here
+  // (A7-A). NOTE: cover_image_url is intentionally absent — it is never read
+  // from client FormData, so the client cannot forge an arbitrary image URL.
+  // The real cover_image_url write path is the A7-B Storage lifecycle.
+  cover_alt: string | null
   seo_title: string | null
   seo_keywords: string | null
   seo_description: string | null
@@ -96,6 +101,11 @@ function readFields(formData: FormData): Fields | { error: string } {
     return { error: "請輸入文章摘要。" }
   }
 
+  // cover_alt: plain text only (never sanitized as HTML, never a content
+  // field). Trim + empty→null. Optional in A7-A; not conditionally required
+  // on cover_image_url presence (that rule is deferred to a later STEP).
+  const cover_alt = orNull(str("cover_alt"))
+
   // content_html remains optional (see A5-B §8) — the raw value (not the
   // trimmed `str()` helper) is normalized so leading/trailing whitespace
   // inside meaningful HTML is not altered.
@@ -111,6 +121,7 @@ function readFields(formData: FormData): Fields | { error: string } {
     start_date,
     end_date,
     excerpt,
+    cover_alt,
     seo_title: orNull(str("seo_title")),
     seo_keywords: orNull(str("seo_keywords")),
     seo_description: orNull(str("seo_description")),
@@ -167,6 +178,7 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
       start_date: fields.start_date,
       end_date: fields.end_date,
       excerpt: fields.excerpt,
+      cover_alt: fields.cover_alt,
       seo_title: fields.seo_title,
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,
@@ -251,6 +263,7 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
       start_date: fields.start_date,
       end_date: fields.end_date,
       excerpt: fields.excerpt,
+      cover_alt: fields.cover_alt,
       seo_title: fields.seo_title,
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,

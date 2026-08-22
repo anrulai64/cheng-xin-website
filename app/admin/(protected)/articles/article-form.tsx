@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createArticle, updateArticle } from "./actions"
 import { RichTextEditor } from "./rich-text-editor"
+import { CoverImageField } from "./cover-image-field"
 
 export type ArticleCategoryOption = {
   id: string
@@ -32,6 +33,11 @@ export type ArticleInitialValues = {
   start_date: string | null
   end_date: string | null
   excerpt: string | null
+  // cover_image_url is DISPLAY-ONLY foundation (A7-A): shown as a read-only
+  // preview, never a persisted client-controlled field. Real upload lifecycle
+  // is A7-B. cover_alt IS editable/persisted here.
+  cover_image_url: string | null
+  cover_alt: string | null
   seo_title: string | null
   seo_keywords: string | null
   seo_description: string | null
@@ -75,6 +81,10 @@ export function ArticleForm({
   const [startDate, setStartDate] = React.useState(initialValues?.start_date ?? "")
   const [endDate, setEndDate] = React.useState(initialValues?.end_date ?? "")
   const [excerpt, setExcerpt] = React.useState(initialValues?.excerpt ?? "")
+  // cover_image_url is intentionally NOT state — it is a read-only preview
+  // value only (A7-A). cover_alt is an editable, persisted field.
+  const coverImageUrl = initialValues?.cover_image_url ?? null
+  const [coverAlt, setCoverAlt] = React.useState(initialValues?.cover_alt ?? "")
   const [contentHtml, setContentHtml] = React.useState(initialValues?.content_html ?? "")
   const [seoTitle, setSeoTitle] = React.useState(initialValues?.seo_title ?? "")
   const [seoKeywords, setSeoKeywords] = React.useState(initialValues?.seo_keywords ?? "")
@@ -107,6 +117,9 @@ export function ArticleForm({
     formData.set("start_date", startDate)
     formData.set("end_date", endDate)
     formData.set("excerpt", excerpt)
+    // cover_alt is persisted; cover_image_url is deliberately NOT submitted —
+    // the server never trusts a client-supplied cover_image_url (A7-A §12).
+    formData.set("cover_alt", coverAlt)
     formData.set("content_html", contentHtml)
     formData.set("seo_title", seoTitle)
     formData.set("seo_keywords", seoKeywords)
@@ -278,6 +291,16 @@ export function ArticleForm({
               aria-invalid={error?.includes("摘要") ? true : undefined}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Cover Image (A7-A foundation: preview + alt only, no upload yet) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">封面圖片</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CoverImageField coverImageUrl={coverImageUrl} alt={coverAlt} onAltChange={setCoverAlt} />
         </CardContent>
       </Card>
 
