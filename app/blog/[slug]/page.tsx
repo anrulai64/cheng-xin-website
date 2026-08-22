@@ -30,20 +30,62 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug } = await params
+
+  // LEGACY-FIRST METADATA OWNERSHIP (STEP A6-B §8): check Legacy first and
+  // return its exact existing metadata immediately on a match — unchanged
+  // from before this STEP. A CMS row can never be queried, let alone override
+  // Legacy metadata, when a legacy slug collision exists.
   const post = blogPosts.find((p) => p.slug === slug)
-  // CMS Articles intentionally get no metadata integration in this STEP
-  // (A6-A §22) — the final CMS SEO contract is deferred to STEP A6-B.
-  if (!post) return {}
-  return {
-    title: post.title,
-    description: post.excerpt,
-    alternates: { canonical: `/blog/${post.slug}` },
-    openGraph: {
-      type: "article",
+  if (post) {
+    return {
       title: post.title,
       description: post.excerpt,
-      images: [{ url: post.image }],
-      publishedTime: post.date,
+      alternates: { canonical: `/blog/${post.slug}` },
+      openGraph: {
+        type: "article",
+        title: post.title,
+        description: post.excerpt,
+        images: [{ url: post.image }],
+        publishedTime: post.date,
+      },
+    }
+  }
+
+  // No Legacy match — attempt the CMS Article metadata contract (STEP A6-B).
+  // getPublicCmsArticleBySlug() already enforces the full public visibility
+  // contract (status + start_date/end_date, defense in depth), so it is the
+  // ONLY query used here — never a separate/weaker metadata-only lookup, and
+  // never a service_role or authenticated fallback. A null result (missing,
+  // draft, offline, or outside the schedule window) must never leak any CMS
+  // field into metadata.
+  const cmsArticle = await getPublicCmsArticleBySlug(slug)
+  if (!cmsArticle) {
+    return {
+      robots: {
+        index: false,
+        follow: false,
+      },
+    }
+  }
+
+  const resolvedTitle = cmsArticle.seo_title?.trim() ? cmsArticle.seo_title.trim() : cmsArticle.title
+  const resolvedDescription = cmsArticle.seo_description?.trim()
+    ? cmsArticle.seo_description.trim()
+    : cmsArticle.excerpt ?? undefined
+  const resolvedKeywords = cmsArticle.seo_keywords?.trim() ? cmsArticle.seo_keywords.trim() : undefined
+  const canonical = `/blog/${cmsArticle.slug}`
+
+  return {
+    title: resolvedTitle,
+    description: resolvedDescription,
+    ...(resolvedKeywords ? { keywords: resolvedKeywords } : {}),
+    alternates: { canonical },
+    openGraph: {
+      type: "article",
+      title: resolvedTitle,
+      description: resolvedDescription,
+      url: canonical,
+      publishedTime: cmsArticle.publish_date,
     },
   }
 }

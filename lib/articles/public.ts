@@ -24,10 +24,13 @@ import { getTaipeiTodayDateString, isArticlePubliclyVisible } from "@/lib/articl
  * and never needs a session, so it now uses the anon-only, dynamic-API-free
  * client instead — still governed by RLS, never service_role.
  *
- * SCOPE LOCK (STEP A6-A): only the fields needed for the very first public
- * CMS Article read path are selected/returned here. No cover image, FAQ,
- * related articles, SEO fields, head_code, memo, or other STEP A6-A-locked
- * columns are queried.
+ * SCOPE LOCK (STEP A6-A, extended in A6-B): only the fields needed for the
+ * public CMS Article read path and its Next.js Metadata contract are
+ * selected/returned here. STEP A6-B adds seo_title/seo_description/
+ * seo_keywords (plain-text SEO overrides, already implemented in Admin) for
+ * generateMetadata() to consume. No cover image, FAQ, related articles,
+ * head_code, memo, content_updated_date, or other still-locked columns are
+ * queried.
  */
 
 export type PublicArticleDetail = {
@@ -44,6 +47,10 @@ export type PublicArticleDetail = {
   end_date: string | null
   excerpt: string | null
   content_html: string | null
+  /** Plain-text SEO overrides (STEP A6-B). Never HTML; never rendered via dangerouslySetInnerHTML. */
+  seo_title: string | null
+  seo_description: string | null
+  seo_keywords: string | null
 }
 
 function assertNoError(error: { message: string; code?: string } | null, context: string): void {
@@ -75,7 +82,9 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
 
   const { data, error } = await supabase
     .from("articles")
-    .select("id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html")
+    .select(
+      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html, seo_title, seo_description, seo_keywords",
+    )
     .eq("slug", trimmed)
     .eq("status", "published")
     .or(`start_date.is.null,start_date.lte.${today}`)
@@ -113,5 +122,8 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
     end_date: data.end_date,
     excerpt: data.excerpt,
     content_html: data.content_html,
+    seo_title: data.seo_title,
+    seo_description: data.seo_description,
+    seo_keywords: data.seo_keywords,
   }
 }
