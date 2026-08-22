@@ -319,3 +319,40 @@
   font-weight: 600;
   text-align: start;
 }
+
+/*
+ * Public rendering of sanitized Article content (ArticleContent →
+ * `.article-content`). Only covers the Article allowlist tags (see
+ * lib/articles/sanitize.ts): p, h2, h3, strong, em, ul, ol, li, blockquote,
+ * br. Deliberately does NOT style a/img/table/hr — those tags are stripped
+ * by the sanitizer and are not part of the Article content contract.
+ */
+.article-content > * + * {
+  margin-top: 0.75em;
+}
+.article-content p {
+  line-height: 1.7;
+}
+.article-content h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.article-content h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.article-content ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+.article-content ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+.article-content blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
-import { sanitizeArticleContentHtml } from "./sanitize"
+import { isEmptyArticleHtml, sanitizeArticleContentHtml } from "@/lib/articles/sanitize"
 
 const LIST_PATH = "/admin/articles"
 
@@ -27,19 +27,13 @@ type Fields = {
   content_html: string | null
 }
 
-// Detects Tiptap's "editor is empty" HTML representations (e.g. "",
-// "<p></p>", "<p><br></p>", or whitespace variants of these) so genuinely
-// empty content is stored as NULL instead of meaningless empty markup.
-// This is a cheap pre-check only — it is NOT the security boundary. The
-// actual security boundary is sanitizeArticleContentHtml() (./sanitize.ts),
-// applied below to every value that passes this pre-check.
-const EMPTY_CONTENT_HTML_PATTERN = /^(?:<p>\s*(?:<br\s*\/?>)?\s*<\/p>\s*)*$/i
-
 /**
  * Normalizes + sanitizes raw content_html from the Admin RichText editor
  * before persistence. Pipeline:
  *   1. Detect genuinely editor-empty raw HTML -> NULL (skips sanitization
- *      entirely for the common empty case).
+ *      entirely for the common empty case). Uses the shared
+ *      isEmptyArticleHtml() shape-check (lib/articles/sanitize.ts) so the
+ *      Admin save path and the public render path never drift.
  *   2. Otherwise, run the untrusted HTML through the server-side allowlist
  *      sanitizer (sanitizeArticleContentHtml).
  *   3. If sanitization strips everything meaningful (e.g. disallowed-only
@@ -48,14 +42,10 @@ const EMPTY_CONTENT_HTML_PATTERN = /^(?:<p>\s*(?:<br\s*\/?>)?\s*<\/p>\s*)*$/i
  *   4. Otherwise, store the sanitized HTML string.
  */
 function normalizeContentHtml(raw: string): string | null {
-  const trimmed = raw.trim()
-  if (trimmed === "") return null
-  if (EMPTY_CONTENT_HTML_PATTERN.test(trimmed)) return null
+  if (isEmptyArticleHtml(raw)) return null
 
   const sanitized = sanitizeArticleContentHtml(raw)
-  if (sanitized.trim() === "" || EMPTY_CONTENT_HTML_PATTERN.test(sanitized.trim())) {
-    return null
-  }
+  if (isEmptyArticleHtml(sanitized)) return null
   return sanitized
 }
 
@@ -229,7 +219,7 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
     .eq("id", fields.category_id)
     .limit(1)
   if (categoryError) {
-    return { ok: false, error: "更新文章失敗，請稍後再試。" }
+    return { ok: false, error: "更新文章失敗，請��後再試。" }
   }
   if (!categoryMatch || categoryMatch.length === 0) {
     return { ok: false, error: "文章分類不存在，請重新選擇。" }
