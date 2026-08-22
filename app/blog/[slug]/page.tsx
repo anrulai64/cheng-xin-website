@@ -6,7 +6,13 @@ import { Clock, ArrowLeft, ArrowRight } from "lucide-react"
 import { PageHero, CtaSection } from "@/components/shared"
 import { ArticleSchema } from "@/components/structured-data"
 import { blogPosts, blogContent, siteConfig } from "@/lib/site-data"
+import { getPublicCmsArticleBySlug, type PublicArticleDetail } from "@/lib/articles/public"
+import { ArticleContent } from "@/components/articles/article-content"
 
+// Prebuild the six existing legacy Blog slugs so their URLs keep SSG
+// behavior. `dynamicParams` is intentionally left at its Next.js default
+// (true) — NOT set to false — so a CMS Article's slug can resolve at request
+// time without a redeploy or a generateStaticParams entry (STEP A6-A §18).
 export function generateStaticParams() {
   return blogPosts.map((p) => ({ slug: p.slug }))
 }
@@ -18,6 +24,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
   const post = blogPosts.find((p) => p.slug === slug)
+  // CMS Articles intentionally get no metadata integration in this STEP
+  // (A6-A §22) — the final CMS SEO contract is deferred to STEP A6-B.
   if (!post) return {}
   return {
     title: post.title,
@@ -43,9 +51,34 @@ export default async function BlogPostPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const post = blogPosts.find((p) => p.slug === slug)
-  if (!post) notFound()
 
+  // LEGACY-FIRST COEXISTENCE (STEP A6-A §2/§3): the six existing static
+  // Blog articles remain authoritative for their own slugs. A CMS Article
+  // must never shadow/replace a legacy slug, even on a slug collision — the
+  // CMS Article is simply never looked up when a legacy match exists.
+  const post = blogPosts.find((p) => p.slug === slug)
+  if (post) {
+    return <LegacyBlogPost slug={slug} post={post} />
+  }
+
+  // No legacy article for this slug — attempt the CMS Article read path.
+  // getPublicCmsArticleBySlug() already enforces the full public visibility
+  // contract (status + start_date/end_date, Asia/Taipei "today", inclusive
+  // boundaries) with defense in depth, so a non-null result here is always
+  // safe to render.
+  const cmsArticle = await getPublicCmsArticleBySlug(slug)
+  if (!cmsArticle) notFound()
+
+  return <CmsBlogPost article={cmsArticle} />
+}
+
+function LegacyBlogPost({
+  slug,
+  post,
+}: {
+  slug: string
+  post: (typeof blogPosts)[number]
+}) {
   const content = blogContent[slug] ?? []
   const related = blogPosts.filter((p) => p.slug !== slug).slice(0, 3)
 
@@ -157,6 +190,74 @@ export default async function BlogPostPage({
           </div>
         </div>
       </section>
+
+      <CtaSection />
+    </>
+  )
+}
+
+/**
+ * First CMS-powered public Article view (STEP A6-A). Reuses the existing
+ * legacy Blog article's visual language as much as practical, but is
+ * intentionally minimal: no cover image (locked), no FAQ/related-article
+ * sections (locked), no structured data (locked), and no author/read-time
+ * (not part of the current Article CMS schema). `content_html` is rendered
+ * ONLY through the shared <ArticleContent> component, which re-sanitizes
+ * before using `dangerouslySetInnerHTML` — this route never renders raw HTML
+ * or duplicates sanitizer logic itself.
+ */
+function CmsBlogPost({ article }: { article: PublicArticleDetail }) {
+  return (
+    <>
+      <PageHero
+        title={article.title}
+        breadcrumbs={[
+          { name: "首頁", href: "/" },
+          { name: "驗屋知識", href: "/blog" },
+          // Category is plain text only in this STEP — /blog/category/[slug]
+          // does not exist yet, so it is never rendered as a link.
+          ...(article.category_name ? [{ name: article.category_name }] : []),
+        ]}
+      />
+
+      <article className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+        {article.category_name && (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="rounded-full bg-accent px-3 py-1 font-medium text-primary">
+              {article.category_name}
+            </span>
+          </div>
+        )}
+
+        {article.excerpt && (
+          <p className="mt-8 text-lg leading-relaxed text-muted-foreground">{article.excerpt}</p>
+        )}
+
+        {/* NULL content_html is expected (Article body is optional) and must
+            not crash or 404 — ArticleContent renders nothing for empty input. */}
+        <ArticleContent html={article.content_html} className="mt-8 space-y-4 leading-8 text-foreground" />
+
+        <div className="mt-12 rounded-2xl border border-border bg-accent/40 p-6 text-center sm:p-8">
+          <h3 className="font-serif text-xl font-bold text-primary">需要專業驗屋協助？</h3>
+          <p className="mt-2 leading-relaxed text-muted-foreground">
+            誠昕驗屋提供新成屋、中古屋與預售屋專業檢測服務。歡迎來電 {siteConfig.phone} 或加 LINE 諮詢。
+          </p>
+          <Link
+            href="/contact"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            立即預約驗屋
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+
+        <div className="mt-10">
+          <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm font-semibold text-secondary hover:text-primary">
+            <ArrowLeft className="size-4" />
+            返回文章列表
+          </Link>
+        </div>
+      </article>
 
       <CtaSection />
     </>
