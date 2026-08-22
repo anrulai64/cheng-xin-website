@@ -127,3 +127,72 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
     seo_keywords: data.seo_keywords,
   }
 }
+
+/**
+ * PUBLIC CMS Article LIST card shape, STEP A6-D.
+ *
+ * Deliberately narrower than PublicArticleDetail — a Blog index card never
+ * needs content_html, SEO overrides, or (still-unimplemented) Cover Image
+ * fields. Only what /blog actually renders is selected/returned.
+ */
+export type PublicArticleListItem = {
+  id: string
+  title: string
+  slug: string
+  category_id: string
+  /** Resolved from article_categories.name. Never a raw UUID; null on lookup miss. */
+  category_name: string | null
+  /** Editorial metadata only — never used for visibility. */
+  publish_date: string
+  excerpt: string | null
+}
+
+/**
+ * All publicly visible CMS Articles for the /blog index, as list cards.
+ *
+ * Reuses the exact same visibility contract as getPublicCmsArticleBySlug:
+ * query-level status + Asia/Taipei start_date/end_date window filtering,
+ * THEN an independent per-row isArticlePubliclyVisible() re-check before any
+ * row is included in the returned list (defense in depth, applied at list
+ * scale rather than single-row scale). No sort order is applied here — the
+ * caller (app/blog/page.tsx) owns merging with Legacy posts and sorting the
+ * combined list.
+ */
+export async function getPublicCmsArticleList(): Promise<PublicArticleListItem[]> {
+  const supabase = createPublicClient()
+  const today = getTaipeiTodayDateString()
+
+  const { data, error } = await supabase
+    .from("articles")
+    .select("id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt")
+    .eq("status", "published")
+    .or(`start_date.is.null,start_date.lte.${today}`)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+
+  assertNoError(error, "getPublicCmsArticleList")
+
+  const visibleRows = (data ?? []).filter((row) => isArticlePubliclyVisible(row, today))
+  if (visibleRows.length === 0) return []
+
+  // Batched category-name lookup (mirrors lib/case-studies/queries.ts'
+  // resolveCategoryNames pattern) — one query for all rows, not N+1.
+  const uniqueCategoryIds = [...new Set(visibleRows.map((row) => row.category_id))]
+  const { data: categories, error: catError } =
+    uniqueCategoryIds.length > 0
+      ? await supabase.from("article_categories").select("id, name").in("id", uniqueCategoryIds)
+      : { data: [] as { id: string; name: string }[], error: null }
+
+  assertNoError(catError, "getPublicCmsArticleList:categories")
+
+  const categoryNames = new Map((categories ?? []).map((c) => [c.id, c.name]))
+
+  return visibleRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    category_id: row.category_id,
+    category_name: categoryNames.get(row.category_id) ?? null,
+    publish_date: row.publish_date,
+    excerpt: row.excerpt,
+  }))
+}
