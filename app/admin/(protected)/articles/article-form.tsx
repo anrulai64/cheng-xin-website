@@ -294,13 +294,19 @@ export function ArticleForm({
         </CardContent>
       </Card>
 
-      {/* Cover Image (A7-A foundation: preview + alt only, no upload yet) */}
+      {/* Cover Image (A7-B2: Edit-only upload / replace / remove lifecycle) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">封面圖片</CardTitle>
         </CardHeader>
         <CardContent>
-          <CoverImageField coverImageUrl={coverImageUrl} alt={coverAlt} onAltChange={setCoverAlt} />
+          <CoverImageField
+            mode={mode}
+            articleId={initialValues?.id ?? null}
+            coverImageUrl={coverImageUrl}
+            alt={coverAlt}
+            onAltChange={setCoverAlt}
+          />
         </CardContent>
       </Card>
 
