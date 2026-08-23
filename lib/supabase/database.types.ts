@@ -296,6 +296,7 @@ export interface Database {
           slug: string
           video_url: string | null
           cover_image_url: string | null
+          cover_image_path: string | null
           publish_date: string
           start_date: string | null
           end_date: string | null
@@ -322,6 +323,7 @@ export interface Database {
           slug: string
           video_url?: string | null
           cover_image_url?: string | null
+          cover_image_path?: string | null
           publish_date?: string
           start_date?: string | null
           end_date?: string | null
@@ -348,6 +350,7 @@ export interface Database {
           slug?: string
           video_url?: string | null
           cover_image_url?: string | null
+          cover_image_path?: string | null
           publish_date?: string
           start_date?: string | null
           end_date?: string | null

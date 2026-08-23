@@ -1,0 +1,63 @@
+-- ============================================================================
+-- ARTICLE CMS V1 — STEP A7-B1: cover image Storage object identity column
+-- ============================================================================
+-- This migration is REPOSITORY FILE ONLY. It has not been executed against
+-- Live Supabase. Do not treat the column below as present in the live
+-- database until a human explicitly runs this script.
+--
+-- BACKGROUND:
+-- STEP A7-A established the Cover Image Admin foundation. public.articles
+-- already has:
+--   cover_image_url text null   -- public rendering URL
+--   cover_alt        text null   -- accessible alt text
+-- The article-images Storage bucket and its admin insert/update/delete +
+-- public read policies already exist (003_articles_storage.sql) and are NOT
+-- touched here.
+--
+-- PROBLEM this migration solves:
+-- Article currently stores only cover_image_url (the full public URL). The
+-- verified Case CMS image pattern (005_cases_storage.sql / case_images)
+-- deliberately stores BOTH the object path AND the public URL, so that
+-- Replace / Remove / parent-delete cleanup can call
+--   storage.from('...').remove([<exact object path>])
+-- without fragile reverse-parsing of a public URL. Article has no such
+-- stored identity, which is a lifecycle-identity risk for the future A7-B2
+-- upload/replace/remove work.
+--
+-- CHANGE:
+-- Add exactly one new, nullable column, public.articles.cover_image_path,
+-- to hold the Storage object path (identity) inside the article-images
+-- bucket — mirroring the Case CMS path+URL separation. This is a pure
+-- SCHEMA + column-comment change.
+--
+-- SCOPE — this migration does ONLY the above. It does NOT:
+--   - modify or backfill cover_image_url or any other existing column
+--   - backfill cover_image_path from existing cover_image_url values
+--   - add any default, NOT NULL, index, constraint, trigger, or function
+--   - insert / update / delete any row
+--   - change RLS, GRANT / REVOKE, or ALTER DEFAULT PRIVILEGES
+--   - touch Storage (storage.buckets / storage.objects / any Storage policy /
+--     bucket file-size limit / allowed MIME types)
+--   - touch Case CMS, admin_users, or any legacy table
+--
+-- COLUMN SEMANTICS (contract for A7-B2):
+--   cover_image_url  = public rendering URL, e.g.
+--     https://<project>.supabase.co/storage/v1/object/public/article-images/articles/<article-id>/cover-....webp
+--   cover_image_path = Storage object path WITHIN the article-images bucket
+--     ONLY, e.g.
+--     articles/<article-id>/cover-....webp
+--   cover_image_path MUST NOT include the bucket name, the Supabase origin,
+--   or the "/storage/v1/object/public/" prefix — it must be exactly what
+--   storage.from('article-images').remove([...]) accepts.
+--
+-- EXISTING ROWS: remain valid with cover_image_path = NULL. There is NO
+-- backfill — reverse-parsing existing cover_image_url values could fabricate
+-- an incorrect object identity, and that URL->path contract is intentionally
+-- deferred to A7-B2.
+-- ============================================================================
+
+alter table public.articles
+  add column if not exists cover_image_path text;
+
+comment on column public.articles.cover_image_path is
+  'Supabase Storage object path within the article-images bucket (e.g. articles/<article-id>/cover-....webp). Excludes bucket name, Supabase origin, and the /storage/v1/object/public/ prefix. Paired with cover_image_url (the public rendering URL). Written only by a trusted authenticated Storage server action after a successful upload; never accepted from client FormData.';
