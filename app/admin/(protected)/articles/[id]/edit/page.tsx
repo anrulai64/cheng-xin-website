@@ -42,6 +42,18 @@ export default async function EditArticlePage({
 
   const categories: ArticleCategoryOption[] = (categoryRows ?? []).map((c) => ({ id: c.id, name: c.name }))
 
+  // STEP A8-B-FIX1 — content_updated_date is `timestamptz` (unlike
+  // publish_date/start_date/end_date, which are plain `date` columns), so
+  // Supabase returns it as a full ISO datetime string (e.g.
+  // "2026-08-20T00:00:00+00:00"), not the bare "YYYY-MM-DD" that
+  // <input type="date"> requires. A mismatched value is silently rejected by
+  // the browser, rendering the field empty even though the value persisted
+  // correctly. Fix: take only the leading 10 characters (pure string slice,
+  // no Date object, no timezone conversion) — this preserves the exact
+  // editorial calendar date the editor selected, since it was written as
+  // midnight UTC for that same date, with no risk of an off-by-one day shift.
+  const contentUpdatedDate = article.content_updated_date ? article.content_updated_date.slice(0, 10) : null
+
   const initialValues: ArticleInitialValues = {
     id: article.id,
     title: article.title,
@@ -58,7 +70,7 @@ export default async function EditArticlePage({
     seo_keywords: article.seo_keywords,
     seo_description: article.seo_description,
     content_html: article.content_html,
-    content_updated_date: article.content_updated_date,
+    content_updated_date: contentUpdatedDate,
   }
 
   return (
