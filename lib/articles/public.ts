@@ -61,6 +61,17 @@ export type PublicArticleDetail = {
   seo_title: string | null
   seo_description: string | null
   seo_keywords: string | null
+  /**
+   * STEP A8-B — editor-controlled "meaningful editorial content update"
+   * timestamp. Deliberately NOT derived from, or kept in sync with, the
+   * generic `updated_at` column (which changes on every row UPDATE,
+   * including administrative-only edits). NULL means "the editor has never
+   * declared a content update" — this is the normal/default state, not an
+   * error, and callers must render it as absent (no dateModified fallback).
+   * Detail-only: never added to PublicArticleListItem or
+   * PublicArticleSitemapEntry in this STEP.
+   */
+  content_updated_date: string | null
 }
 
 function assertNoError(error: { message: string; code?: string } | null, context: string): void {
@@ -93,7 +104,7 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
   const { data, error } = await supabase
     .from("articles")
     .select(
-      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html, cover_image_url, cover_alt, seo_title, seo_description, seo_keywords",
+      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html, cover_image_url, cover_alt, seo_title, seo_description, seo_keywords, content_updated_date",
     )
     .eq("slug", trimmed)
     .eq("status", "published")
@@ -138,6 +149,7 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
     seo_title: data.seo_title,
     seo_description: data.seo_description,
     seo_keywords: data.seo_keywords,
+    content_updated_date: data.content_updated_date,
   }
 }
 

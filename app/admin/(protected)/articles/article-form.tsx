@@ -42,6 +42,11 @@ export type ArticleInitialValues = {
   seo_keywords: string | null
   seo_description: string | null
   content_html: string | null
+  // STEP A8-B — editor-controlled "meaningful editorial content update" date.
+  // NULL means the editor has never declared a content update (the normal
+  // default state, never auto-derived). Nullable here for the same reason
+  // start_date/end_date are nullable — the input normalizes NULL to "".
+  content_updated_date: string | null
 }
 
 const LIST_PATH = "/admin/articles"
@@ -80,6 +85,11 @@ export function ArticleForm({
   )
   const [startDate, setStartDate] = React.useState(initialValues?.start_date ?? "")
   const [endDate, setEndDate] = React.useState(initialValues?.end_date ?? "")
+  // STEP A8-B — optional, editor-controlled. On Create, defaults to empty
+  // (NOT today's date, NOT publish_date) — unlike publishDate, which defaults
+  // to today in create mode. On Edit, hydrates the existing stored value (or
+  // "" when it has never been set).
+  const [contentUpdatedDate, setContentUpdatedDate] = React.useState(initialValues?.content_updated_date ?? "")
   const [excerpt, setExcerpt] = React.useState(initialValues?.excerpt ?? "")
   // cover_image_url is intentionally NOT state — it is a read-only preview
   // value only (A7-A). cover_alt is an editable, persisted field.
@@ -116,6 +126,9 @@ export function ArticleForm({
     formData.set("publish_date", publishDate)
     formData.set("start_date", startDate)
     formData.set("end_date", endDate)
+    // STEP A8-B — sent as-is (empty string when cleared/never set); the
+    // server normalizes "" -> NULL exactly like start_date/end_date.
+    formData.set("content_updated_date", contentUpdatedDate)
     formData.set("excerpt", excerpt)
     // cover_alt is persisted; cover_image_url is deliberately NOT submitted —
     // the server never trusts a client-supplied cover_image_url (A7-A §12).
@@ -276,6 +289,21 @@ export function ArticleForm({
           <p className="text-xs text-muted-foreground">
             公開顯示需同時符合「狀態為已發布」與「目前日期在上線/下線期間內」。
           </p>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="content_updated_date">內容更新日期（選填）</Label>
+            <Input
+              id="content_updated_date"
+              type="date"
+              value={contentUpdatedDate}
+              onChange={(e) => setContentUpdatedDate(e.target.value)}
+              aria-invalid={error?.includes("內容更新日期") ? true : undefined}
+              className="sm:w-64"
+            />
+            <p className="text-xs text-muted-foreground">
+              僅在文章內容有實質更新時設定。若僅修改 SEO、排程、封面、置頂或其他管理設定，請勿變更此日期。
+            </p>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="excerpt">

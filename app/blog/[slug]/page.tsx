@@ -302,12 +302,19 @@ function CmsBlogPost({ article }: { article: PublicArticleDetail }) {
   // as an absolute URL and emits it as-is (no siteConfig.url prepend).
   const coverImage = article.cover_image_url?.trim() ? article.cover_image_url.trim() : undefined
 
+  // STEP A8-B — JSON-LD dateModified source: the editor-controlled
+  // `content_updated_date` ONLY, and only when explicitly set. NULL (the
+  // default — never automatically stamped) omits `dateModified` entirely.
+  // No fallback to publish_date/updated_at/created_at is ever applied here.
+  const contentUpdatedDate = article.content_updated_date?.trim() ? article.content_updated_date.trim() : undefined
+
   return (
     <>
       <ArticleSchema
         title={article.title}
         description={resolvedDescription}
         datePublished={article.publish_date}
+        {...(contentUpdatedDate ? { dateModified: contentUpdatedDate } : {})}
         {...(coverImage ? { image: coverImage } : {})}
         author="誠昕驗屋團隊"
         url={`/blog/${article.slug}`}

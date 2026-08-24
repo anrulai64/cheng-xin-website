@@ -10,6 +10,10 @@ const LIST_PATH = "/admin/articles"
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const STATUS_VALUES = new Set(["draft", "published", "offline"])
+// STEP A8-B — same plain "YYYY-MM-DD" shape produced by the native
+// <input type="date"> used for publish_date/start_date/end_date. Reused here
+// rather than inventing a second date/time convention.
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 // `warning` is populated ONLY on the ok:true branch when the Article row
 // delete succeeded but the Cover Storage cleanup (A7-B3) could not be fully
@@ -35,6 +39,11 @@ type Fields = {
   seo_keywords: string | null
   seo_description: string | null
   content_html: string | null
+  // STEP A8-B — editor-controlled "meaningful editorial content update" date.
+  // NEVER auto-derived (not now(), not publish_date, not updated_at, not a
+  // content diff). Optional; "" from the client normalizes to NULL, exactly
+  // like start_date/end_date.
+  content_updated_date: string | null
 }
 
 /**
@@ -101,6 +110,22 @@ function readFields(formData: FormData): Fields | { error: string } {
     return { error: "上線開始日期不可晚於下線日期。" }
   }
 
+  // STEP A8-B — optional, human-controlled field. Empty input (the default,
+  // and the result of explicitly clearing it) normalizes to NULL — never to
+  // now()/publish_date/updated_at, and never inferred from any other field.
+  // When non-empty, it must be a well-formed calendar date; malformed input
+  // fails safely with a field-level error rather than being silently coerced
+  // or persisted as garbage.
+  const rawContentUpdatedDate = str("content_updated_date")
+  let content_updated_date: string | null = null
+  if (rawContentUpdatedDate !== "") {
+    const isWellFormed = DATE_PATTERN.test(rawContentUpdatedDate) && !Number.isNaN(Date.parse(rawContentUpdatedDate))
+    if (!isWellFormed) {
+      return { error: "內容更新日期格式錯誤，請重新選擇。" }
+    }
+    content_updated_date = rawContentUpdatedDate
+  }
+
   const excerpt = str("excerpt")
   if (excerpt === "") {
     return { error: "請輸入文章摘要。" }
@@ -131,6 +156,7 @@ function readFields(formData: FormData): Fields | { error: string } {
     seo_keywords: orNull(str("seo_keywords")),
     seo_description: orNull(str("seo_description")),
     content_html,
+    content_updated_date,
   }
 }
 
@@ -188,6 +214,7 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,
       content_html: fields.content_html,
+      content_updated_date: fields.content_updated_date,
     })
     .select("id")
     .single()
@@ -273,6 +300,7 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
       seo_keywords: fields.seo_keywords,
       seo_description: fields.seo_description,
       content_html: fields.content_html,
+      content_updated_date: fields.content_updated_date,
     })
     .eq("id", id)
     .select("id")
