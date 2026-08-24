@@ -95,17 +95,29 @@ export function ArticleSchema({
   datePublished: string
   /** Omitted from the emitted JSON-LD entirely when not provided. */
   dateModified?: string
-  /** Omitted from the emitted JSON-LD entirely when not provided. */
+  /**
+   * Omitted from the emitted JSON-LD entirely when not provided.
+   *
+   * Accepts EITHER a site-relative path (Legacy Blog, e.g. "/hero.png") OR an
+   * already-absolute URL (STEP A7-D CMS Cover, an absolute Supabase Storage
+   * `cover_image_url`). A relative path is composed against siteConfig.url
+   * exactly as before — so every existing Legacy call site emits a
+   * byte-identical `image` — while an absolute URL is used as-is, preventing a
+   * broken "https://site...https://supabase..." concatenation. This is a
+   * compile-safe superset of the previous behavior; no call site is forced to
+   * change and CMS `cover_image_path` is never involved.
+   */
   image?: string
   author: string
   url: string
 }) {
+  const resolvedImage = image ? (/^https?:\/\//i.test(image) ? image : `${siteConfig.url}${image}`) : undefined
   const data = {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: title,
     description,
-    ...(image ? { image: `${siteConfig.url}${image}` } : {}),
+    ...(resolvedImage ? { image: resolvedImage } : {}),
     datePublished,
     ...(dateModified ? { dateModified } : {}),
     author: { "@type": "Organization", name: author },

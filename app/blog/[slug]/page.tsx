@@ -75,6 +75,18 @@ export async function generateMetadata({
   const resolvedKeywords = cmsArticle.seo_keywords?.trim() ? cmsArticle.seo_keywords.trim() : undefined
   const canonical = `/blog/${cmsArticle.slug}`
 
+  // STEP A7-D — CMS Cover SEO source. The ONLY image source is the trusted
+  // public `cover_image_url` persisted by the A7-B2 Server Action; never
+  // cover_image_path, never a reverse-parsed Storage path, never a
+  // content_html image, never an Admin filename. A null/blank URL means "this
+  // Article has no cover" -> we fabricate NO route-specific OG/Twitter image
+  // (no hero-inspection.png, no Legacy image, no stock, no empty string).
+  const coverUrl = cmsArticle.cover_image_url?.trim() ? cmsArticle.cover_image_url.trim() : undefined
+  // og:image:alt / twitter:image alt — reuses the same A7-C alt contract
+  // (trimmed cover_alt, else Article title). Only ever attached to an image
+  // that actually exists, so it never produces a dangling alt.
+  const coverAlt = cmsArticle.cover_alt?.trim() ? cmsArticle.cover_alt.trim() : cmsArticle.title
+
   return {
     title: resolvedTitle,
     description: resolvedDescription,
@@ -86,7 +98,29 @@ export async function generateMetadata({
       description: resolvedDescription,
       url: canonical,
       publishedTime: cmsArticle.publish_date,
+      // Only add an OG image when the Article genuinely has a Cover. When
+      // absent, `images` is omitted so no route-specific og:image is emitted
+      // (root metadata has no OG image either, so nothing is fabricated).
+      ...(coverUrl ? { images: [{ url: coverUrl, alt: coverAlt }] } : {}),
     },
+    // Next.js shallow-merges metadata: a route-level `twitter` object REPLACES
+    // the root one wholesale (it does not deep-merge). So a route Twitter card
+    // MUST restate card/title/description or they would be lost. We therefore
+    // only introduce a route-level Twitter object when there is a Cover to add
+    // — restating the root card type (summary_large_image) plus the resolved
+    // CMS title/description. Without a Cover we add NO route Twitter object, so
+    // the Article correctly inherits the root Twitter defaults unchanged. Root
+    // has no site/creator handles, so none are fabricated here.
+    ...(coverUrl
+      ? {
+          twitter: {
+            card: "summary_large_image" as const,
+            title: resolvedTitle,
+            description: resolvedDescription,
+            images: [{ url: coverUrl, alt: coverAlt }],
+          },
+        }
+      : {}),
   }
 }
 
@@ -261,12 +295,20 @@ function CmsBlogPost({ article }: { article: PublicArticleDetail }) {
   // seo_description when non-empty, otherwise excerpt. No divergent contract.
   const resolvedDescription = article.seo_description?.trim() ? article.seo_description.trim() : article.excerpt ?? ""
 
+  // STEP A7-D — Article JSON-LD image source: the trusted absolute public
+  // `cover_image_url` ONLY, and only when present. undefined when the Article
+  // has no Cover, so ArticleSchema omits the JSON-LD `image` entirely (never
+  // "image": null / "" / a fabricated fallback). ArticleSchema recognizes this
+  // as an absolute URL and emits it as-is (no siteConfig.url prepend).
+  const coverImage = article.cover_image_url?.trim() ? article.cover_image_url.trim() : undefined
+
   return (
     <>
       <ArticleSchema
         title={article.title}
         description={resolvedDescription}
         datePublished={article.publish_date}
+        {...(coverImage ? { image: coverImage } : {})}
         author="誠昕驗屋團隊"
         url={`/blog/${article.slug}`}
       />
