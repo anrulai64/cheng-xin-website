@@ -233,16 +233,31 @@ export async function getPublicCmsArticleList(): Promise<PublicArticleListItem[]
 }
 
 /**
- * PUBLIC CMS Article SITEMAP entry shape, STEP A6-E.
+ * PUBLIC CMS Article SITEMAP entry shape, STEP A6-E (lastModified source
+ * changed in A8-C2).
  *
  * The absolute minimum a sitemap URL needs: the slug (to build /blog/{slug})
- * and updated_at (lastModified). No title/excerpt/SEO/cover/category fields —
- * a sitemap never renders content. status/start_date/end_date are read only
- * to run the visibility re-check and are deliberately NOT returned.
+ * plus the two fields needed to compute a truthful lastModified. No
+ * title/excerpt/SEO/cover/category fields — a sitemap never renders content.
+ * status/start_date/end_date are read only to run the visibility re-check and
+ * are deliberately NOT returned.
+ *
+ * STEP A8-C2 — `updated_at` was REMOVED from this type (and from the query
+ * below). A8-C1 audited it and found it advances on every Article row
+ * UPDATE, including purely administrative edits (Cover replace/remove,
+ * SEO-only edits, status/schedule changes) that never represent a meaningful
+ * public content change — using it here produced false-freshness "lastmod"
+ * signals. It is replaced by `content_updated_date` (the human-editor-
+ * declared content-modification date, already established in A8-B) with a
+ * fallback to `publish_date` (schema non-null) when no content update has
+ * ever been declared. `updated_at` MUST NOT be reintroduced into this type.
  */
 export type PublicArticleSitemapEntry = {
   slug: string
-  updated_at: string
+  /** Editor-declared content-modification date; NULL when never declared. Never derived from updated_at. */
+  content_updated_date: string | null
+  /** Non-null editorial publish date; used as the lastModified fallback only when content_updated_date is NULL. */
+  publish_date: string
 }
 
 /**
@@ -252,7 +267,8 @@ export type PublicArticleSitemapEntry = {
  * Reuses the exact same visibility contract as the Detail and Blog Index
  * paths: query-level status + Asia/Taipei start_date/end_date window filter,
  * THEN an independent per-row isArticlePubliclyVisible() re-check (defense in
- * depth). publish_date never participates.
+ * depth). This filter is unchanged by A8-C2 — only the projected
+ * lastModified-source fields changed.
  *
  * DB-error philosophy (STEP A6-E §16): a query failure throws a sanitized
  * error via assertNoError — it is NEVER silently coerced into an empty list,
@@ -265,7 +281,7 @@ export async function getPublicArticleSitemapEntries(): Promise<PublicArticleSit
 
   const { data, error } = await supabase
     .from("articles")
-    .select("slug, updated_at, status, start_date, end_date")
+    .select("slug, content_updated_date, publish_date, status, start_date, end_date")
     .eq("status", "published")
     .or(`start_date.is.null,start_date.lte.${today}`)
     .or(`end_date.is.null,end_date.gte.${today}`)
@@ -275,5 +291,9 @@ export async function getPublicArticleSitemapEntries(): Promise<PublicArticleSit
 
   return (data ?? [])
     .filter((row) => isArticlePubliclyVisible(row, today))
-    .map((row) => ({ slug: row.slug, updated_at: row.updated_at }))
+    .map((row) => ({
+      slug: row.slug,
+      content_updated_date: row.content_updated_date,
+      publish_date: row.publish_date,
+    }))
 }

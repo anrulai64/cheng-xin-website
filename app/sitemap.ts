@@ -80,13 +80,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // caught/omitted: getPublicArticleSitemapEntries() throws a sanitized error
   // on DB failure and we let it surface, rather than silently fabricating
   // "0 public Articles" and dropping every CMS URL from the sitemap (§16).
+  // STEP A8-C2 — lastModified source changed from the generic `updated_at`
+  // row-update timestamp to the editor-declared `content_updated_date`
+  // (falling back to the non-null `publish_date` when no content update has
+  // ever been declared). `updated_at` is intentionally never passed here
+  // anymore: it advances on administrative-only edits (Cover, SEO, status,
+  // schedule) that are not meaningful public content changes, which made the
+  // sitemap's freshness signal misleading (A8-C1 audit). toLastModified's
+  // second argument (its "createdAt" fallback slot) is reused for
+  // publish_date here purely as a fallback value slot — publish_date is
+  // schema non-null, so the function's own epoch fallback is never reached
+  // for CMS Articles.
   const legacyBlogSlugs = new Set(blogPosts.map((p) => p.slug))
   const cmsArticleEntries = await getPublicArticleSitemapEntries()
   const cmsBlogRoutes = cmsArticleEntries
     .filter((a) => hasUsableSlug(a.slug) && !legacyBlogSlugs.has(a.slug))
     .map((a) => ({
       url: `${base}/blog/${a.slug.trim()}`,
-      lastModified: toLastModified(a.updated_at, null),
+      lastModified: toLastModified(a.content_updated_date, a.publish_date),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     }))
