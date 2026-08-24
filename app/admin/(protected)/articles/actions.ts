@@ -4,13 +4,18 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/admin/auth"
 import { isEmptyArticleHtml, sanitizeArticleContentHtml } from "@/lib/articles/sanitize"
+import { ARTICLE_IMAGE_BUCKET, isOwnedArticleCoverPath } from "@/lib/admin/articles/cover-image"
 
 const LIST_PATH = "/admin/articles"
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const STATUS_VALUES = new Set(["draft", "published", "offline"])
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string }
+// `warning` is populated ONLY on the ok:true branch when the Article row
+// delete succeeded but the Cover Storage cleanup (A7-B3) could not be fully
+// completed (invalid ownership or a Storage remove failure). It never
+// indicates the Article delete itself failed.
+export type ActionResult = { ok: true; id?: string; warning?: string } | { ok: false; error: string }
 
 type Fields = {
   title: string
@@ -293,14 +298,32 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
 // All three child references CASCADE. Deleting the Article row directly is
 // therefore safe and sufficient — no manual FAQ / related-article row
 // deletion is needed here, and none is performed.
+// STEP A7-B3 — Article Delete Storage Cleanup.
+//
+// Hard ordering contract (never reversed):
+//   1. requireAdmin
+//   2. fetch Article by id -> minimal fields: id, cover_image_path
+//   3. validate cover ownership if a path exists (reuses the A7-B2
+//      isOwnedArticleCoverPath helper — no second ownership algorithm)
+//   4. delete the Article row
+//   5. confirm the delete actually removed a row (zero-row is NOT success)
+//   6. ONLY after DB delete success: clean up the exact Cover Storage object
+//   7. revalidate the Admin list
+//
+// Deleting Storage BEFORE the DB row would risk a live Article pointing at a
+// missing cover if the row delete then failed. The reverse (row deleted, then
+// Storage cleanup fails) only ever leaves a harmless orphan object, which is
+// the acceptable worst case here.
 export async function deleteArticle(id: string): Promise<ActionResult> {
   await requireAdmin()
   const supabase = await createClient()
 
-  // Minimal existence check — never load the full Article body/metadata.
+  // Minimal existence check — never load title/slug/content/seo/cover_alt.
+  // cover_image_path is the ONLY additional field needed, and it is read
+  // exclusively from the DB — the client never supplies it.
   const { data: existing, error: existingError } = await supabase
     .from("articles")
-    .select("id")
+    .select("id, cover_image_path")
     .eq("id", id)
     .limit(1)
 
@@ -310,6 +333,16 @@ export async function deleteArticle(id: string): Promise<ActionResult> {
   if (!existing || existing.length === 0) {
     return { ok: false, error: "文章不存在或已被刪除。" }
   }
+
+  const coverPath = existing[0].cover_image_path
+
+  // Ownership is evaluated before the delete so the outcome (owned / not
+  // owned / absent) is known deterministically, but the actual Storage
+  // mutation always happens AFTER the DB delete succeeds (§ ordering above).
+  // An invalid/foreign path is NEVER deleted and NEVER blocks the row delete
+  // — it only downgrades the eventual result to a partial-success warning.
+  const ownedCoverPath = coverPath && isOwnedArticleCoverPath(coverPath, id) ? coverPath : null
+  const foreignCoverPath = coverPath && !ownedCoverPath ? coverPath : null
 
   const { data: deleted, error: deleteError } = await supabase
     .from("articles")
@@ -321,7 +354,7 @@ export async function deleteArticle(id: string): Promise<ActionResult> {
     if (deleteError.code === "23503") {
       // All known child FKs CASCADE (see audit note above), so a 23503 here
       // would indicate an unexpected reference this code does not know
-      // about. Do not guess which table caused it.
+      // about. Do not guess which table caused it. Storage is untouched.
       return { ok: false, error: "文章目前仍被其他資料使用，暫時無法刪除。" }
     }
     return { ok: false, error: "刪除文章失敗，請稍後再試。" }
@@ -330,6 +363,31 @@ export async function deleteArticle(id: string): Promise<ActionResult> {
     return { ok: false, error: "文章不存在或已被刪除。" }
   }
 
+  // Core Article deletion has succeeded from this point on. Everything below
+  // is best-effort cleanup — its outcome is reported as `warning`, never as
+  // an `error`, because the row delete itself must not be re-litigated.
   revalidatePath(LIST_PATH)
+
+  if (foreignCoverPath) {
+    // The stored path did not belong to this Article's namespace. Never
+    // delete it (could belong to another Article, another bucket, or be
+    // corrupt metadata) — just log the anomaly and surface a warning.
+    console.error("[v0] article delete: cover path not owned by article, skipping delete", id, foreignCoverPath)
+    return { ok: true, id, warning: "文章已刪除，但封面圖片檔案清理失敗，請稍後再試或聯絡管理員。" }
+  }
+
+  if (ownedCoverPath) {
+    // Delete the exact object only — never a folder/prefix/wildcard.
+    const { error: removeError } = await supabase.storage.from(ARTICLE_IMAGE_BUCKET).remove([ownedCoverPath])
+    if (removeError) {
+      // An already-missing object does not surface as an error from the SDK,
+      // so reaching here means a genuine permission/network/unexpected
+      // Storage failure. The Article row is already deleted and stays
+      // deleted; the leftover object is an orphan, not a broken reference.
+      console.error("[v0] article delete: cover storage cleanup failed (orphan left)", id, ownedCoverPath, removeError)
+      return { ok: true, id, warning: "文章已刪除，但封面圖片檔案清理失敗，請稍後再試或聯絡管理員。" }
+    }
+  }
+
   return { ok: true, id }
 }

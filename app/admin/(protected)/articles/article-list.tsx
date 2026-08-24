@@ -95,6 +95,11 @@ function ScheduleSummary({ row }: { row: ArticleListRow }) {
 }
 
 export function ArticleList({ rows }: { rows: ArticleListRow[] }) {
+  // List-level (not row-level) because a successful delete makes `router
+  // .refresh()` remove the row entirely — a warning stored inside the row's
+  // own state would disappear along with it before the admin could read it.
+  const [listWarning, setListWarning] = React.useState<string | null>(null)
+
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed px-6 py-12 text-center">
@@ -105,32 +110,43 @@ export function ArticleList({ rows }: { rows: ArticleListRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[1040px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-            <th className="px-3 py-2.5 font-medium">文章標題</th>
-            <th className="px-3 py-2.5 font-medium">分類</th>
-            <th className="px-3 py-2.5 font-medium">Slug</th>
-            <th className="px-3 py-2.5 font-medium">狀態</th>
-            <th className="px-3 py-2.5 font-medium">發布日期</th>
-            <th className="px-3 py-2.5 font-medium">排程</th>
-            <th className="px-3 py-2.5 font-medium">SEO 狀態</th>
-            <th className="w-16 px-3 py-2.5 font-medium">修改</th>
-            <th className="px-3 py-2.5 font-medium">刪除</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <ArticleRow key={row.id} row={row} />
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      {listWarning ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{listWarning}</span>
+        </div>
+      ) : null}
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[1040px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+              <th className="px-3 py-2.5 font-medium">文章標題</th>
+              <th className="px-3 py-2.5 font-medium">分類</th>
+              <th className="px-3 py-2.5 font-medium">Slug</th>
+              <th className="px-3 py-2.5 font-medium">狀態</th>
+              <th className="px-3 py-2.5 font-medium">發布日期</th>
+              <th className="px-3 py-2.5 font-medium">排程</th>
+              <th className="px-3 py-2.5 font-medium">SEO 狀態</th>
+              <th className="w-16 px-3 py-2.5 font-medium">修改</th>
+              <th className="px-3 py-2.5 font-medium">刪除</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <ArticleRow key={row.id} row={row} onWarning={setListWarning} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
-function ArticleRow({ row }: { row: ArticleListRow }) {
+function ArticleRow({ row, onWarning }: { row: ArticleListRow; onWarning: (warning: string | null) => void }) {
   const router = useRouter()
   const [confirming, setConfirming] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -138,12 +154,18 @@ function ArticleRow({ row }: { row: ArticleListRow }) {
 
   function handleDelete() {
     setError(null)
+    onWarning(null)
     startTransition(async () => {
       const result = await deleteArticle(row.id)
       if (!result.ok) {
         setError(result.error)
         setConfirming(false)
         return
+      }
+      // Article row delete already succeeded here — `warning` only reflects
+      // a best-effort Cover Storage cleanup issue, never a delete failure.
+      if (result.warning) {
+        onWarning(result.warning)
       }
       router.refresh()
     })
