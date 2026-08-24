@@ -25,8 +25,12 @@ function formatDate(date: string) {
 }
 
 // Smallest shared render shape for the mixed lower grid. Legacy entries keep
-// their `image`; CMS entries never have one (Cover Image is unimplemented) —
-// `image` is optional, never defaulted to a placeholder/site/logo image.
+// their `image` (a bundled static asset). CMS entries (STEP A7-C) may now
+// carry a `coverImageUrl` (a Supabase public Storage URL) plus a plain-text
+// `coverAlt`. Both image fields are optional and are NEVER defaulted to a
+// placeholder/site/logo image — an entry with no image renders imageless.
+// The two image sources are kept as separate fields so Legacy rendering is
+// byte-for-byte unchanged and never accidentally consumes CMS cover data.
 type BlogIndexEntry = {
   source: "legacy" | "cms"
   slug: string
@@ -35,6 +39,8 @@ type BlogIndexEntry = {
   category: string | null
   date: string
   image?: string
+  coverImageUrl?: string
+  coverAlt?: string
 }
 
 export default async function BlogPage() {
@@ -76,6 +82,11 @@ export default async function BlogPage() {
       excerpt: article.excerpt ?? "",
       category: article.category_name,
       date: article.publish_date,
+      // STEP A7-C: only enrich with cover data; ordering/inclusion untouched.
+      // A null cover_image_url stays undefined -> the card renders imageless.
+      coverImageUrl: article.cover_image_url ?? undefined,
+      // Alt resolved at render time (cover_alt || title) — stored raw here.
+      coverAlt: article.cover_alt ?? undefined,
     }))
 
   const mixedEntries = [...legacyEntries, ...cmsEntries].sort((a, b) => {
@@ -162,31 +173,70 @@ export default async function BlogPage() {
                 </div>
               </Link>
             ) : (
-              // CMS card: intentionally no image region — no placeholder, no
-              // site/logo image, no broken-image UI. A text-forward layout
-              // that still visually belongs to the same grid.
-              <Link
-                key={entry.slug}
-                href={`/blog/${entry.slug}`}
-                className="group flex flex-col justify-between rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:shadow-lg"
-              >
-                <div>
-                  <div className="flex items-center gap-3 text-xs">
-                    {entry.category && (
-                      <span className="rounded-full bg-accent px-2.5 py-0.5 font-medium text-primary">
-                        {entry.category}
-                      </span>
-                    )}
-                    <span className="text-muted-foreground">{formatDate(entry.date)}</span>
+              // CMS card (STEP A7-C): renders the Cover Image ONLY when the
+              // Article actually has one (coverImageUrl present). With a
+              // cover it mirrors the Legacy card's image-topped layout
+              // (same aspect-[16/10] + object-cover + grid rhythm); without a
+              // cover it falls back to the original text-forward layout — no
+              // placeholder, no site/logo image, no broken-image UI. Cover
+              // images are lazy by default (no `priority`) per the perf
+              // contract. Alt = trimmed cover_alt, else the Article title.
+              entry.coverImageUrl ? (
+                <Link
+                  key={entry.slug}
+                  href={`/blog/${entry.slug}`}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="relative aspect-[16/10] overflow-hidden">
+                    <Image
+                      src={entry.coverImageUrl || "/placeholder.svg"}
+                      alt={entry.coverAlt?.trim() ? entry.coverAlt.trim() : entry.title}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    />
                   </div>
-                  <h3 className="mt-3 text-balance font-bold leading-snug text-primary">{entry.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{entry.excerpt}</p>
-                </div>
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-secondary">
-                  閱讀全文
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                </span>
-              </Link>
+                  <div className="flex flex-1 flex-col p-6">
+                    <div className="flex items-center gap-3 text-xs">
+                      {entry.category && (
+                        <span className="rounded-full bg-accent px-2.5 py-0.5 font-medium text-primary">
+                          {entry.category}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">{formatDate(entry.date)}</span>
+                    </div>
+                    <h3 className="mt-3 text-balance font-bold leading-snug text-primary">{entry.title}</h3>
+                    <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{entry.excerpt}</p>
+                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-secondary">
+                      閱讀全文
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                    </span>
+                  </div>
+                </Link>
+              ) : (
+                <Link
+                  key={entry.slug}
+                  href={`/blog/${entry.slug}`}
+                  className="group flex flex-col justify-between rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div>
+                    <div className="flex items-center gap-3 text-xs">
+                      {entry.category && (
+                        <span className="rounded-full bg-accent px-2.5 py-0.5 font-medium text-primary">
+                          {entry.category}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">{formatDate(entry.date)}</span>
+                    </div>
+                    <h3 className="mt-3 text-balance font-bold leading-snug text-primary">{entry.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{entry.excerpt}</p>
+                  </div>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-secondary">
+                    閱讀全文
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
+              )
             ),
           )}
         </div>

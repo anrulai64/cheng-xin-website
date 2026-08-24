@@ -47,6 +47,16 @@ export type PublicArticleDetail = {
   end_date: string | null
   excerpt: string | null
   content_html: string | null
+  /**
+   * PUBLIC Cover Image fields (STEP A7-C). Only the public rendering URL and
+   * the plain-text accessible alt are ever exposed publicly — `cover_image_path`
+   * (the Storage object identity used by authenticated Admin lifecycle
+   * operations) is deliberately NOT part of any public type or query.
+   * `cover_image_url` is null when the Article has no cover; `cover_alt` is
+   * plain text (never HTML) and is null/empty when the editor left it blank.
+   */
+  cover_image_url: string | null
+  cover_alt: string | null
   /** Plain-text SEO overrides (STEP A6-B). Never HTML; never rendered via dangerouslySetInnerHTML. */
   seo_title: string | null
   seo_description: string | null
@@ -83,7 +93,7 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
   const { data, error } = await supabase
     .from("articles")
     .select(
-      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html, seo_title, seo_description, seo_keywords",
+      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, content_html, cover_image_url, cover_alt, seo_title, seo_description, seo_keywords",
     )
     .eq("slug", trimmed)
     .eq("status", "published")
@@ -122,6 +132,9 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
     end_date: data.end_date,
     excerpt: data.excerpt,
     content_html: data.content_html,
+    // PUBLIC cover data only — cover_image_path is never selected or returned.
+    cover_image_url: data.cover_image_url,
+    cover_alt: data.cover_alt,
     seo_title: data.seo_title,
     seo_description: data.seo_description,
     seo_keywords: data.seo_keywords,
@@ -129,11 +142,13 @@ export async function getPublicCmsArticleBySlug(slug: string): Promise<PublicArt
 }
 
 /**
- * PUBLIC CMS Article LIST card shape, STEP A6-D.
+ * PUBLIC CMS Article LIST card shape, STEP A6-D (Cover fields added A7-C).
  *
  * Deliberately narrower than PublicArticleDetail — a Blog index card never
- * needs content_html, SEO overrides, or (still-unimplemented) Cover Image
- * fields. Only what /blog actually renders is selected/returned.
+ * needs content_html or SEO overrides. As of A7-C it DOES carry the public
+ * Cover rendering fields (cover_image_url + plain-text cover_alt) so an index
+ * card can show the Article's cover; cover_image_path is never included.
+ * Only what /blog actually renders is selected/returned.
  */
 export type PublicArticleListItem = {
   id: string
@@ -145,6 +160,9 @@ export type PublicArticleListItem = {
   /** Editorial metadata only — never used for visibility. */
   publish_date: string
   excerpt: string | null
+  /** PUBLIC Cover Image fields (STEP A7-C). null when the Article has no cover. */
+  cover_image_url: string | null
+  cover_alt: string | null
 }
 
 /**
@@ -164,7 +182,9 @@ export async function getPublicCmsArticleList(): Promise<PublicArticleListItem[]
 
   const { data, error } = await supabase
     .from("articles")
-    .select("id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt")
+    .select(
+      "id, title, slug, category_id, status, publish_date, start_date, end_date, excerpt, cover_image_url, cover_alt",
+    )
     .eq("status", "published")
     .or(`start_date.is.null,start_date.lte.${today}`)
     .or(`end_date.is.null,end_date.gte.${today}`)
@@ -194,6 +214,9 @@ export async function getPublicCmsArticleList(): Promise<PublicArticleListItem[]
     category_name: categoryNames.get(row.category_id) ?? null,
     publish_date: row.publish_date,
     excerpt: row.excerpt,
+    // PUBLIC cover data only — cover_image_path is never selected or returned.
+    cover_image_url: row.cover_image_url,
+    cover_alt: row.cover_alt,
   }))
 }
 

@@ -297,6 +297,30 @@ function CmsBlogPost({ article }: { article: PublicArticleDetail }) {
           </div>
         )}
 
+        {/* CMS Cover hero (STEP A7-C): rendered ONLY when the Article has a
+            cover_image_url, in the same above-the-fold position and with the
+            same aspect-[16/9] rounded frame the Legacy detail hero uses — so
+            with-cover CMS Articles match the established visual language.
+            When there is no cover, NOTHING is rendered here (no empty box,
+            no reserved blank hero, no broken image, no 404 request), and the
+            page keeps its current no-cover structure. The cover is visually
+            associated with the Article and lives OUTSIDE content_html — it is
+            never injected into the sanitized Rich Text body. `priority`
+            matches the Legacy hero in this identical LCP slot. Alt = trimmed
+            cover_alt, else the Article title (never "", "cover", "封面圖片"). */}
+        {article.cover_image_url && (
+          <div className="relative mt-6 aspect-[16/9] overflow-hidden rounded-2xl">
+            <Image
+              src={article.cover_image_url || "/placeholder.svg"}
+              alt={article.cover_alt?.trim() ? article.cover_alt.trim() : article.title}
+              fill
+              priority
+              className="object-cover"
+              sizes="(min-width: 768px) 768px, 100vw"
+            />
+          </div>
+        )}
+
         {article.excerpt && (
           <p className="mt-8 text-lg leading-relaxed text-muted-foreground">{article.excerpt}</p>
         )}
