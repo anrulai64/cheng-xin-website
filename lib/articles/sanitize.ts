@@ -26,36 +26,79 @@ import sanitizeHtml from "sanitize-html"
  *     `dangerouslySetInnerHTML` in the narrowly-scoped Article public
  *     rendering component only.
  *
- * Policy: this allowlist is intentionally NARROWER than Case CMS's, because
- * the Article RichText toolbar (see
- * app/admin/(protected)/articles/rich-text-editor.tsx) is locked to a
- * smaller feature set — no links, no images, no tables, no custom styles.
- * Only tags reachable from that toolbar are allowed; everything else
- * (scripts, styles, event handlers, iframes, links, images, tables, H1,
- * arbitrary attributes) is stripped.
+ * Policy (STEP A10-B): this allowlist is intentionally still NARROWER than
+ * Case CMS's. The Article RichText toolbar (see
+ * app/admin/(protected)/articles/rich-text-editor.tsx) now covers the
+ * A10-B "core editor foundation" feature set: paragraph, H2/H3,
+ * bold/italic, UNDERLINE, STRIKETHROUGH, bullet/ordered list, blockquote,
+ * HORIZONTAL RULE, TEXT ALIGN (left/center/right), LINKS (insert/edit/
+ * remove) and a Source/HTML mode. Only tags/attributes reachable from that
+ * toolbar (or hand-writable in Source mode within this same allowlist) are
+ * permitted; everything else is stripped.
+ *
+ * A10-B deliberately does NOT yet allow: img, iframe/YouTube, table (and
+ * its th/td/thead/tbody/colgroup/col), span, or any typography style
+ * (font-size, font-family, color, background-color). Those belong to the
+ * later A10-C/A10-D/A10-E/A10-F STEPS and MUST NOT be pre-enabled here.
  *
  * Do NOT broaden this allowlist without updating both the Admin editor
  * toolbar and this comment in the same change.
  */
 
-// Exactly the block/inline tags StarterKit's locked toolbar can produce:
-// paragraph, heading (levels 2-3 only), bold, italic, bullet list,
-// ordered list, list item, blockquote. `br` is included because Tiptap's
-// hard-break behavior (Shift+Enter within a paragraph) serializes to <br>,
-// which is required to preserve that line-break content correctly.
-export const ARTICLE_ALLOWED_TAGS = ["p", "h2", "h3", "strong", "em", "ul", "ol", "li", "blockquote", "br"]
+// Block/inline tags the A10-B toolbar can produce. Added in A10-B:
+//   - `u`  : Underline mark (StarterKit v3 bundles @tiptap/extension-underline)
+//   - `s`  : Strikethrough mark (StarterKit Strike)
+//   - `hr` : Horizontal rule (StarterKit HorizontalRule)
+//   - `a`  : Link mark (StarterKit v3 bundles @tiptap/extension-link)
+// `br` is included because Tiptap's hard-break (Shift+Enter) serializes to
+// <br>. Text alignment does NOT add a tag — it adds a `text-align` inline
+// style on the existing block tags (p/h2/h3), handled via allowedStyles
+// below. Still no `h1` (the Article title owns the page H1).
+export const ARTICLE_ALLOWED_TAGS = [
+  "p",
+  "h2",
+  "h3",
+  "strong",
+  "em",
+  "u",
+  "s",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "hr",
+  "a",
+  "br",
+]
 
-// No tag in ARTICLE_ALLOWED_TAGS needs an attribute for the current locked
-// toolbar (no href/src, no style/class/id, no data-*/aria-*, no event
-// handlers). Omitting attributes entirely means none can survive.
-export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {}
+// Only links carry attributes in A10-B. `href` is validated against the
+// scheme allowlist below; `target`/`rel` are permitted so the editor's
+// external-link behavior (target="_blank") and the transformTags-enforced
+// safe `rel` can survive. No tag is allowed `style` here directly — the
+// text-align style is permitted separately via `allowedStyles` (which
+// sanitize-html applies independently of `allowedAttributes`).
+export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
+  a: ["href", "target", "rel"],
+}
 
 /**
- * Sanitizes Article `content_html` against the locked RichText toolbar
+ * Sanitizes Article `content_html` against the A10-B RichText toolbar
  * allowlist. Returns `""` for null/undefined/non-string input. Unexpected
  * sanitizer errors are allowed to throw so callers can decide how to fail
  * (Admin: abort the save; Public: treat as empty) — raw HTML is never used
  * as a fallback in either caller.
+ *
+ * LINK rel/target policy (STEP A10-B §9/§10): unlike Case CMS — which
+ * globally forces `target="_blank"` AND `rel="...nofollow"` on every link —
+ * Articles must keep INTERNAL links normally crawlable. So:
+ *   - Internal root-relative links (href starting with "/"): no forced
+ *     target, no forced rel, and any stray nofollow the editor might have
+ *     added is removed so internal SEO link equity is preserved.
+ *   - External links opened in a new tab (target="_blank"): forced
+ *     rel="noopener noreferrer" (security), but NOT nofollow — editorial
+ *     external links stay follow by default.
+ * `javascript:`, `data:`, `vbscript:` and other unsafe schemes are stripped
+ * by allowedSchemes below regardless of the transform.
  */
 export function sanitizeArticleContentHtml(dirty: string | null | undefined): string {
   if (!dirty || typeof dirty !== "string") return ""
@@ -63,15 +106,53 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
   return sanitizeHtml(dirty, {
     allowedTags: ARTICLE_ALLOWED_TAGS,
     allowedAttributes: ARTICLE_ALLOWED_ATTRIBUTES,
-    // No URL-bearing tags/attributes are allowed above, so no scheme
-    // should ever need to pass through. Disallow all schemes explicitly
-    // rather than relying on library defaults.
-    allowedSchemes: [],
+    // Safe link schemes only. This strips javascript:/data:/vbscript: from
+    // href. Root-relative internal links ("/blog/...") are not schemes and
+    // are always permitted by sanitize-html.
+    allowedSchemes: ["http", "https", "mailto", "tel"],
     allowedSchemesByTag: {},
     allowProtocolRelative: false,
-    // No style attribute is allowed above; this is redundant defense
-    // against arbitrary CSS surviving via some other path.
-    allowedStyles: {},
+    // ONLY the text-align property (from the TextAlign extension), and only
+    // the three approved values, on the block tags Tiptap emits it on.
+    // No other CSS property can survive — this is NOT an open style channel
+    // and MUST NOT be broadened for typography until the relevant A10 STEP.
+    allowedStyles: {
+      p: { "text-align": [/^(left|center|right)$/] },
+      h2: { "text-align": [/^(left|center|right)$/] },
+      h3: { "text-align": [/^(left|center|right)$/] },
+    },
+    // Article-specific safe link handling (see policy doc above).
+    transformTags: {
+      a: (tagName, attribs) => {
+        const out: sanitizeHtml.IFrame["attribs"] = { ...attribs }
+        const href = (out.href ?? "").trim()
+        const isInternal = href.startsWith("/")
+
+        if (isInternal) {
+          // Internal links stay plain + crawlable: no new tab, no nofollow.
+          delete out.target
+          delete out.rel
+        } else if (out.target === "_blank") {
+          // External new-tab links: enforce security rel, but never nofollow.
+          const rel = new Set((out.rel ?? "").split(/\s+/).filter(Boolean))
+          rel.delete("nofollow")
+          rel.add("noopener")
+          rel.add("noreferrer")
+          out.rel = Array.from(rel).join(" ")
+        } else if (out.rel) {
+          // Non-new-tab external link that arrived with a rel: strip any
+          // stray nofollow the editor may have added, keep nothing else
+          // meaningful (there is no security need without target=_blank).
+          const rel = new Set(out.rel.split(/\s+/).filter(Boolean))
+          rel.delete("nofollow")
+          if (rel.size > 0) out.rel = Array.from(rel).join(" ")
+          else delete out.rel
+        }
+        return { tagName, attribs: out }
+      },
+    },
+    // No iframe support in A10-B.
+    allowedIframeHostnames: [],
     parser: {
       lowerCaseAttributeNames: true,
     },

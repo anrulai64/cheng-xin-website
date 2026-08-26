@@ -322,10 +322,12 @@
 
 /*
  * Public rendering of sanitized Article content (ArticleContent →
- * `.article-content`). Only covers the Article allowlist tags (see
- * lib/articles/sanitize.ts): p, h2, h3, strong, em, ul, ol, li, blockquote,
- * br. Deliberately does NOT style a/img/table/hr — those tags are stripped
- * by the sanitizer and are not part of the Article content contract.
+ * `.article-content`). Covers the A10-B Article allowlist tags (see
+ * lib/articles/sanitize.ts): p, h2, h3, strong, em, u, s, ul, ol, li,
+ * blockquote, hr, a, br — plus the text-align inline style permitted on
+ * p/h2/h3. Deliberately does NOT style img/table/iframe — those tags are
+ * still stripped by the sanitizer and are not part of the A10-B content
+ * contract (they arrive in later A10 STEPS).
  */
 .article-content > * + * {
   margin-top: 0.75em;
@@ -355,4 +357,28 @@
   border-left: 3px solid var(--border);
   padding-left: 1rem;
   color: var(--muted-foreground);
+}
+/* A10-B: inline link — crawlable, clearly styled, safe wrapping. */
+.article-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.article-content a:hover {
+  text-decoration: none;
+}
+/* A10-B: underline / strikethrough marks. */
+.article-content u {
+  text-decoration: underline;
+}
+.article-content s {
+  text-decoration: line-through;
+}
+/* A10-B: horizontal rule. */
+.article-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
 }
