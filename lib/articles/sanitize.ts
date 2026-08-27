@@ -71,14 +71,24 @@ export const ARTICLE_ALLOWED_TAGS = [
   "br",
 ]
 
-// Only links carry attributes in A10-B. `href` is validated against the
-// scheme allowlist below; `target`/`rel` are permitted so the editor's
-// external-link behavior (target="_blank") and the transformTags-enforced
-// safe `rel` can survive. No tag is allowed `style` here directly — the
-// text-align style is permitted separately via `allowedStyles` (which
-// sanitize-html applies independently of `allowedAttributes`).
+// Attribute allowlist for A10-B.
+//   - `a`: `href` is validated against the scheme allowlist below;
+//     `target`/`rel` are permitted so the editor's external-link behavior
+//     (target="_blank") and the transformTags-enforced safe `rel` survive.
+//   - `p`/`h2`/`h3`: `style` MUST be listed here for the text-align
+//     alignment to survive. In sanitize-html, `allowedStyles` only FILTERS
+//     the VALUES of a `style` attribute that has ALREADY been permitted via
+//     `allowedAttributes`; if `style` is not allowed on the tag, the whole
+//     attribute is stripped BEFORE `allowedStyles` runs (this was the
+//     A10-B-FIX1 root cause). `allowedStyles` below then narrows the
+//     surviving `style` to ONLY `text-align: left|center|right` — no other
+//     property (color/font/position/etc.) can pass, so exposing `style`
+//     here does NOT open an arbitrary-style channel.
 export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
   a: ["href", "target", "rel"],
+  p: ["style"],
+  h2: ["style"],
+  h3: ["style"],
 }
 
 /**
