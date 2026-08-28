@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useEditor, EditorContent, useEditorState } from "@tiptap/react"
-import type { Editor } from "@tiptap/react"
+import { useEditor, EditorContent, useEditorState, Extension } from "@tiptap/react"
+import type { Editor, SingleCommands } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { TextAlign } from "@tiptap/extension-text-align"
 // A10-C typography. In TipTap v3 the TextStyle mark plus its Color /
@@ -74,6 +74,14 @@ type Props = {
  *
  * A10-C deliberately still does NOT add image, table, or YouTube controls —
  * those are later A10 STEPS.
+ *
+ * A10-C-FIX4 adds one targeted Enter-key UX fix on top of A10-C: pressing
+ * Enter now starts a clean default Paragraph (no inherited Bold/Italic/
+ * Underline/Strike/Link/Font Size/Font Family/Text Color/Highlight/
+ * TextAlign) EXCEPT inside Bullet List / Ordered List, where native TipTap
+ * list continuation is fully preserved. See the `CleanEnterOnReturn`
+ * extension below for the exact mechanism, and its doc comment for the
+ * specific double-dispatch bug an earlier version of this fix had.
  *
  * TipTap features here ship from @tiptap/starter-kit@3 (Underline, Strike,
  * HorizontalRule, Link), @tiptap/extension-text-align, and — new in A10-C —
@@ -234,6 +242,118 @@ function Menu({
   )
 }
 
+/**
+ * A10-C-FIX4 — "clean Enter" formatting reset.
+ *
+ * TipTap's default Enter binding (the core `keymap` extension every editor
+ * gets automatically) runs
+ * `first([newlineInCode, createParagraphNear, liftEmptyBlock, splitBlock])`.
+ * `splitBlock()` defaults to `keepMarks: true` AND copies the split node's
+ * attrs (including `textAlign`, which is `keepOnSplit: true` by default for
+ * node attributes) onto the new node — that combination is why Bold/Italic/
+ * Underline/Strike/Link/Font Size/Font Family/Text Color/Highlight/
+ * TextAlign were all carrying over into the new line, and why a Heading
+ * only became a Paragraph when Enter was pressed at the very END of its
+ * text (splitBlock's internal `atEnd` branch) rather than from the middle.
+ *
+ * This extension replaces ONLY the final `splitBlock()` step of that same
+ * chain with a "clean paragraph" variant, added LAST in the `extensions`
+ * array below so it is tried before StarterKit's list/blockquote bindings
+ * (TipTap reverses extension registration order when building each
+ * extension's keymap plugin, so the last-registered extension's shortcuts
+ * run first):
+ *   1. List continuation (bulletList/orderedList/listItem) is detected
+ *      FIRST and explicitly bypassed (`return false`, with NO transaction
+ *      dispatched yet) so ProseMirror falls through to
+ *      `@tiptap/extension-list`'s own native `splitListItem` Enter binding
+ *      — list Enter/exit behavior is completely untouched.
+ *   2. `newlineInCode` / `createParagraphNear` / `liftEmptyBlock` run via
+ *      `editor.commands.first(...)` exactly as they do in TipTap's default
+ *      chain — this is what keeps Blockquote's native empty-paragraph exit
+ *      (and Enter beside a leaf node like the horizontal rule) working
+ *      unmodified. `first()` shares one transaction across all three and
+ *      only dispatches if one of them actually applies, so nothing is
+ *      dispatched here unless one of these truly handles the Enter press.
+ *   3. Only if none of those apply do we run our own replacement for
+ *      `splitBlock()`: split with `keepMarks: false`, force the new block
+ *      to `paragraph` (covers Heading → Paragraph at ANY cursor position,
+ *      not just at the end), `unsetTextAlign()` (TextAlign's attribute is
+ *      `keepOnSplit: true` by default and would otherwise carry center/
+ *      right into the new line), and clear ProseMirror's stored marks —
+ *      the previous line's marks persist as "stored marks" on the new
+ *      empty cursor, and there is no existing TipTap command for this
+ *      specific case (`unsetAllMarks()` is a documented no-op on an empty
+ *      selection).
+ *
+ * IMPORTANT correctness note (this is the exact bug an earlier version of
+ * this extension had, which corrupted documents with duplicate/extra empty
+ * paragraphs on nearly every Enter press, and had to be reverted):
+ * `editor.chain()...run()` ALWAYS dispatches its transaction (that's a
+ * side effect), but `run()`'s RETURN VALUE is `every command in the chain
+ * returned true`, which is unrelated to whether something was dispatched.
+ * `unsetTextAlign()` returns `false` whenever the block has no explicit
+ * alignment to reset — which is the common case for a plain paragraph —
+ * so naively `return editor.chain()...unsetTextAlign()...run()` reports
+ * "false" (unhandled) to ProseMirror's keymap on nearly every Enter press,
+ * EVEN THOUGH THE SPLIT ALREADY HAPPENED. ProseMirror then falls through
+ * to the NEXT Enter handler (StarterKit's default splitBlock), which
+ * performs a SECOND split on top of the transaction we already dispatched.
+ * That is why this handler explicitly ignores the aggregate `.run()`
+ * boolean once we've committed to owning step 3, and unconditionally
+ * returns `true` — by this point in the function we've already ruled out
+ * both list continuation and every structural-exit case, so this is the
+ * one and only handler that should ever run a plain block split here,
+ * exactly mirroring the precondition TipTap's own default Enter command
+ * relies on before it calls `splitBlock()`.
+ */
+const CleanEnterOnReturn = Extension.create({
+  name: "cleanEnterOnReturn",
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { editor } = this
+
+        // 1) List continuation is a hard exception — nothing has been
+        // dispatched yet, so it's safe to defer to the list extension's
+        // own Enter handling untouched.
+        if (editor.isActive("bulletList") || editor.isActive("orderedList") || editor.isActive("listItem")) {
+          return false
+        }
+
+        // 2) Preserve native structural Enter behavior (Blockquote's
+        // empty-paragraph exit, Enter beside a leaf node, code blocks).
+        // `first()` shares one transaction and only dispatches if one of
+        // these three actually applies.
+        const structuralExit = editor.commands.first(({ commands }: { commands: SingleCommands }) => [
+          () => commands.newlineInCode(),
+          () => commands.createParagraphNear(),
+          () => commands.liftEmptyBlock(),
+        ])
+        if (structuralExit) return true
+
+        // 3) Ordinary clean-paragraph split: the new block is always a
+        // Paragraph, default-aligned, with zero inline formatting. The
+        // previous block (and its formatting) is left completely
+        // untouched. We deliberately do NOT return the chain's aggregate
+        // boolean here — see the correctness note above. Once we reach
+        // this branch we own the Enter keystroke unconditionally.
+        editor
+          .chain()
+          .splitBlock({ keepMarks: false })
+          .setParagraph()
+          .unsetTextAlign()
+          .command(({ tr }) => {
+            tr.setStoredMarks([])
+            return true
+          })
+          .run()
+
+        return true
+      },
+    }
+  },
+})
+
 export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
@@ -269,6 +389,11 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       FontSize,
       FontFamily,
       Highlight.configure({ multicolor: true }),
+      // A10-C-FIX4. Must stay LAST so its Enter binding is tried before
+      // StarterKit's list/blockquote/paragraph Enter bindings (see the
+      // extension's own doc comment above for why registration order
+      // controls keymap precedence in TipTap).
+      CleanEnterOnReturn,
     ],
     content: value,
     editorProps: {
