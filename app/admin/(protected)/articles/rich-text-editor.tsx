@@ -454,7 +454,7 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
             </TB>
             <Divider />
             {/* Typography (A10-C) */}
-            <Menu icon={<CaseSensitive className="size-4" />} title="字體" active={Boolean(state?.fontFamily)}>
+            <Menu icon={<Type className="size-4" />} title="字體" active={Boolean(state?.fontFamily)}>
               <div className="flex flex-col gap-0.5">
                 <button
                   type="button"
@@ -479,7 +479,7 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
                 ))}
               </div>
             </Menu>
-            <Menu icon={<Type className="size-4" />} title="字級" active={Boolean(state?.fontSize)}>
+            <Menu icon={<CaseSensitive className="size-4" />} title="字級" active={Boolean(state?.fontSize)}>
               <div className="flex flex-col gap-0.5">
                 <button
                   type="button"
