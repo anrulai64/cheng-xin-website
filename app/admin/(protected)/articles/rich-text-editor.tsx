@@ -454,31 +454,6 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
             </TB>
             <Divider />
             {/* Typography (A10-C) */}
-            <Menu icon={<Type className="size-4" />} title="字級" active={Boolean(state?.fontSize)}>
-              <div className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted"
-                  onClick={() => editor?.chain().focus().unsetFontSize().run()}
-                >
-                  正常
-                </button>
-                {FONT_SIZES.map((f) => (
-                  <button
-                    key={f.value}
-                    type="button"
-                    className={cn(
-                      "rounded px-2 py-1 text-left text-sm hover:bg-muted",
-                      state?.fontSize === f.value && "bg-muted font-semibold",
-                    )}
-                    style={{ fontSize: f.value }}
-                    onClick={() => editor?.chain().focus().setFontSize(f.value).run()}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </Menu>
             <Menu icon={<CaseSensitive className="size-4" />} title="字體" active={Boolean(state?.fontFamily)}>
               <div className="flex flex-col gap-0.5">
                 <button
@@ -498,6 +473,31 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
                     )}
                     style={{ fontFamily: f.value }}
                     onClick={() => editor?.chain().focus().setFontFamily(f.value).run()}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </Menu>
+            <Menu icon={<Type className="size-4" />} title="字級" active={Boolean(state?.fontSize)}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  onClick={() => editor?.chain().focus().unsetFontSize().run()}
+                >
+                  正常
+                </button>
+                {FONT_SIZES.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className={cn(
+                      "rounded px-2 py-1 text-left text-sm hover:bg-muted",
+                      state?.fontSize === f.value && "bg-muted font-semibold",
+                    )}
+                    style={{ fontSize: f.value }}
+                    onClick={() => editor?.chain().focus().setFontSize(f.value).run()}
                   >
                     {f.label}
                   </button>
