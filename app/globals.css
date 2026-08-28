@@ -382,3 +382,15 @@
   margin-top: 1.5em;
   margin-bottom: 1.5em;
 }
+/*
+ * A10-C: highlight (<mark>). The background-color arrives as a validated
+ * inline style from the closed palette; here we only add padding/rounding
+ * and force a readable dark ink so highlighted text stays legible on the
+ * light tints (mark's UA default can vary). Font size / family / color come
+ * in as inline <span> styles and need no rule.
+ */
+.article-content mark {
+  padding: 0.05em 0.2em;
+  border-radius: 0.2em;
+  color: #262524;
+}

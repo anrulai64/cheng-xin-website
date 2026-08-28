@@ -5,15 +5,25 @@ import { useEditor, EditorContent, useEditorState } from "@tiptap/react"
 import type { Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { TextAlign } from "@tiptap/extension-text-align"
+// A10-C typography. In TipTap v3 the TextStyle mark plus its Color /
+// FontSize / FontFamily global attributes all ship from a single package
+// (@tiptap/extension-text-style); Highlight is its own package. All are
+// pinned to the installed 3.30.1 line. These add NO parsing of arbitrary
+// styles that survive the server sanitizer — the sanitizer is authoritative.
+import { TextStyle, Color, FontSize, FontFamily } from "@tiptap/extension-text-style"
+import { Highlight } from "@tiptap/extension-highlight"
 import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  Baseline,
   Bold,
+  CaseSensitive,
   Code,
   Eye,
   Heading2,
   Heading3,
+  Highlighter,
   Italic,
   Link as LinkIcon,
   List,
@@ -23,6 +33,7 @@ import {
   Quote,
   Redo2,
   Strikethrough,
+  Type,
   Underline as UnderlineIcon,
   Undo2,
   Unlink,
@@ -55,12 +66,19 @@ type Props = {
  * lib/articles/sanitize.ts, applied server-side on save and again on public
  * render. Source mode is therefore NOT a sanitizer bypass.
  *
- * A10-B deliberately does NOT add image, table, YouTube, or typography
- * (font/color) controls — those are later A10 STEPS.
+ * A10-C adds CONTROLLED typography on top of that foundation: font size,
+ * font family, text color, and highlight — each restricted to a fixed
+ * palette (see FONT_SIZES / FONT_FAMILIES / TEXT_COLORS / HIGHLIGHTS below)
+ * that is mirrored exactly by the server sanitizer's closed style allowlist.
+ * There is NO free-form color picker, arbitrary font, or open size input.
  *
- * All required TipTap features here ship inside the already-installed
- * @tiptap/starter-kit@3 (Underline, Strike, HorizontalRule, Link) plus the
- * already-installed @tiptap/extension-text-align. NO new package is added.
+ * A10-C deliberately still does NOT add image, table, or YouTube controls —
+ * those are later A10 STEPS.
+ *
+ * TipTap features here ship from @tiptap/starter-kit@3 (Underline, Strike,
+ * HorizontalRule, Link), @tiptap/extension-text-align, and — new in A10-C —
+ * @tiptap/extension-text-style (TextStyle/Color/FontSize/FontFamily) and
+ * @tiptap/extension-highlight, all pinned to the installed 3.30.1 line.
  */
 
 /** Small toolbar button. type="button" so it never submits the form. */
@@ -100,6 +118,122 @@ function Divider() {
   return <span aria-hidden className="mx-0.5 h-6 w-px shrink-0 bg-border" />
 }
 
+/**
+ * CONTROLLED TYPOGRAPHY PALETTES (A10-C).
+ *
+ * These are the ONLY typography values the editor can produce. Each value is
+ * a single canonical string (fixed rem / CSS generic keyword / #rrggbb hex)
+ * so it round-trips byte-identically through save → DB → edit reload without
+ * canonicalization drift, and requires NO CSS `var()` (which the sanitizer
+ * rejects).
+ *
+ * They MUST stay byte-identical to the `allowedStyles` regexes in
+ * lib/articles/sanitize.ts. If they diverge, valid editor output would be
+ * silently stripped on save. Update BOTH files together.
+ */
+const FONT_SIZES: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "小", value: "0.875rem" },
+  { label: "大", value: "1.25rem" },
+  { label: "特大", value: "1.5rem" },
+]
+const FONT_FAMILIES: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "襯線體", value: "serif" },
+  { label: "等寬體", value: "monospace" },
+]
+const TEXT_COLORS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "深色", value: "#262524" },
+  { label: "灰色", value: "#6b6a67" },
+  { label: "品牌橘", value: "#c2703d" },
+  { label: "深藍", value: "#3d4a5c" },
+  { label: "紅色", value: "#b3261e" },
+]
+const HIGHLIGHTS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "黃", value: "#fef3c7" },
+  { label: "綠", value: "#dcfce7" },
+  { label: "藍", value: "#dbeafe" },
+  { label: "粉", value: "#fce7f3" },
+  { label: "橘", value: "#ffedd5" },
+]
+
+/** A small colored swatch button used by the color / highlight menus. */
+function Swatch({
+  color,
+  label,
+  active,
+  onClick,
+}: {
+  color: string
+  label: string
+  active?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "size-6 rounded-full border transition-transform hover:scale-110",
+        active ? "border-foreground ring-2 ring-ring ring-offset-1" : "border-border",
+      )}
+      style={{ backgroundColor: color }}
+    />
+  )
+}
+
+/**
+ * A toolbar dropdown menu (details/summary) that closes on selection.
+ * Used for the four typography controls so the toolbar stays compact.
+ */
+function Menu({
+  icon,
+  title,
+  active,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  active?: boolean
+  children: React.ReactNode
+}) {
+  const ref = React.useRef<HTMLDetailsElement>(null)
+  // Close the menu whenever the user clicks outside it.
+  React.useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) ref.current.open = false
+    }
+    document.addEventListener("mousedown", onDocClick)
+    return () => document.removeEventListener("mousedown", onDocClick)
+  }, [])
+  return (
+    <details ref={ref} className="relative">
+      <summary
+        title={title}
+        aria-label={title}
+        className={cn(
+          "inline-flex h-8 min-w-8 cursor-pointer list-none items-center justify-center gap-0.5 rounded-md border border-transparent px-1.5 text-sm transition-colors",
+          "hover:bg-muted [&::-webkit-details-marker]:hidden",
+          active && "border-border bg-muted font-semibold text-foreground",
+        )}
+      >
+        {icon}
+      </summary>
+      <div
+        className="absolute left-0 top-full z-20 mt-1 min-w-40 rounded-md border border-border bg-popover p-2 shadow-md"
+        onClick={(e) => {
+          // Collapse the menu after any interior click (selection made).
+          const d = e.currentTarget.closest("details")
+          if (d) d.open = false
+        }}
+      >
+        {children}
+      </div>
+    </details>
+  )
+}
+
 export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
@@ -126,6 +260,15 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
         },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }),
+      // A10-C controlled typography. TextStyle is the base <span> mark that
+      // Color / FontSize / FontFamily attach their inline styles to; the
+      // editor only ever sets values from the fixed palettes above, and the
+      // server sanitizer independently enforces that same closed allowlist.
+      TextStyle,
+      Color,
+      FontSize,
+      FontFamily,
+      Highlight.configure({ multicolor: true }),
     ],
     content: value,
     editorProps: {
@@ -158,6 +301,11 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       isLeft: e?.isActive({ textAlign: "left" }) ?? false,
       isCenter: e?.isActive({ textAlign: "center" }) ?? false,
       isRight: e?.isActive({ textAlign: "right" }) ?? false,
+      // Current typography marks at the selection (null when unset).
+      fontSize: (e?.getAttributes("textStyle").fontSize as string | undefined) ?? null,
+      fontFamily: (e?.getAttributes("textStyle").fontFamily as string | undefined) ?? null,
+      color: (e?.getAttributes("textStyle").color as string | undefined) ?? null,
+      highlight: (e?.getAttributes("highlight").color as string | undefined) ?? null,
       canUndo: e?.can().undo() ?? false,
       canRedo: e?.can().redo() ?? false,
     }),
@@ -304,6 +452,102 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
             <TB title="靠右對齊" active={state?.isRight} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
               <AlignRight className="size-4" />
             </TB>
+            <Divider />
+            {/* Typography (A10-C) */}
+            <Menu icon={<Type className="size-4" />} title="字級" active={Boolean(state?.fontSize)}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  onClick={() => editor?.chain().focus().unsetFontSize().run()}
+                >
+                  正常
+                </button>
+                {FONT_SIZES.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className={cn(
+                      "rounded px-2 py-1 text-left text-sm hover:bg-muted",
+                      state?.fontSize === f.value && "bg-muted font-semibold",
+                    )}
+                    style={{ fontSize: f.value }}
+                    onClick={() => editor?.chain().focus().setFontSize(f.value).run()}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </Menu>
+            <Menu icon={<CaseSensitive className="size-4" />} title="字體" active={Boolean(state?.fontFamily)}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  onClick={() => editor?.chain().focus().unsetFontFamily().run()}
+                >
+                  預設
+                </button>
+                {FONT_FAMILIES.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className={cn(
+                      "rounded px-2 py-1 text-left text-sm hover:bg-muted",
+                      state?.fontFamily === f.value && "bg-muted font-semibold",
+                    )}
+                    style={{ fontFamily: f.value }}
+                    onClick={() => editor?.chain().focus().setFontFamily(f.value).run()}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </Menu>
+            <Menu icon={<Baseline className="size-4" />} title="文字顏色" active={Boolean(state?.color)}>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {TEXT_COLORS.map((c) => (
+                    <Swatch
+                      key={c.value}
+                      color={c.value}
+                      label={c.label}
+                      active={state?.color === c.value}
+                      onClick={() => editor?.chain().focus().setColor(c.value).run()}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
+                  onClick={() => editor?.chain().focus().unsetColor().run()}
+                >
+                  清除顏色
+                </button>
+              </div>
+            </Menu>
+            <Menu icon={<Highlighter className="size-4" />} title="螢光標記" active={Boolean(state?.highlight)}>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {HIGHLIGHTS.map((h) => (
+                    <Swatch
+                      key={h.value}
+                      color={h.value}
+                      label={h.label}
+                      active={state?.highlight === h.value}
+                      onClick={() => editor?.chain().focus().setHighlight({ color: h.value }).run()}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
+                  onClick={() => editor?.chain().focus().unsetHighlight().run()}
+                >
+                  清除標記
+                </button>
+              </div>
+            </Menu>
             <Divider />
             {/* History */}
             <TB title="復原" disabled={!state?.canUndo} onClick={() => editor?.chain().focus().undo().run()}>

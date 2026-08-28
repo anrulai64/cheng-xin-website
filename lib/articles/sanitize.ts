@@ -26,34 +26,48 @@ import sanitizeHtml from "sanitize-html"
  *     `dangerouslySetInnerHTML` in the narrowly-scoped Article public
  *     rendering component only.
  *
- * Policy (STEP A10-B): this allowlist is intentionally still NARROWER than
+ * Policy (STEP A10-C): this allowlist is intentionally still NARROWER than
  * Case CMS's. The Article RichText toolbar (see
  * app/admin/(protected)/articles/rich-text-editor.tsx) now covers the
- * A10-B "core editor foundation" feature set: paragraph, H2/H3,
- * bold/italic, UNDERLINE, STRIKETHROUGH, bullet/ordered list, blockquote,
- * HORIZONTAL RULE, TEXT ALIGN (left/center/right), LINKS (insert/edit/
- * remove) and a Source/HTML mode. Only tags/attributes reachable from that
- * toolbar (or hand-writable in Source mode within this same allowlist) are
- * permitted; everything else is stripped.
+ * A10-B core set (paragraph, H2/H3, bold/italic, UNDERLINE, STRIKETHROUGH,
+ * bullet/ordered list, blockquote, HORIZONTAL RULE, TEXT ALIGN, LINKS,
+ * Source/HTML mode) PLUS the A10-C "controlled typography" set:
+ *   - FONT SIZE  → <span style="font-size: …rem"> (fixed rem allowlist)
+ *   - FONT FAMILY → <span style="font-family: …">  (fixed keyword allowlist)
+ *   - TEXT COLOR → <span style="color: #rrggbb">   (fixed palette allowlist)
+ *   - HIGHLIGHT  → <mark style="background-color: #rrggbb"> (fixed palette)
+ * Only tags/attributes reachable from that toolbar (or hand-writable in
+ * Source mode within this same allowlist) are permitted; everything else is
+ * stripped.
  *
- * A10-B deliberately does NOT yet allow: img, iframe/YouTube, table (and
- * its th/td/thead/tbody/colgroup/col), span, or any typography style
- * (font-size, font-family, color, background-color). Those belong to the
- * later A10-C/A10-D/A10-E/A10-F STEPS and MUST NOT be pre-enabled here.
+ * CRITICAL: typography is a CLOSED palette, NOT an open style channel. The
+ * `span`/`mark` `style` attribute is permitted only so `allowedStyles` can
+ * then narrow it to the EXACT approved property/value pairs below. Any other
+ * property (position, display, width, background-image, url(), font-size
+ * outside the rem set, arbitrary colors, etc.) is stripped. The palette
+ * values here MUST stay byte-identical to the editor's dropdown constants
+ * (FONT_SIZES / FONT_FAMILIES / TEXT_COLORS / HIGHLIGHTS in
+ * rich-text-editor.tsx) or valid editor output would be silently dropped on
+ * save — update BOTH files together.
+ *
+ * A10-C deliberately still does NOT allow: img, iframe/YouTube, table (and
+ * its th/td/thead/tbody/colgroup/col). Those belong to later A10 STEPS and
+ * MUST NOT be pre-enabled here.
  *
  * Do NOT broaden this allowlist without updating both the Admin editor
  * toolbar and this comment in the same change.
  */
 
-// Block/inline tags the A10-B toolbar can produce. Added in A10-B:
-//   - `u`  : Underline mark (StarterKit v3 bundles @tiptap/extension-underline)
-//   - `s`  : Strikethrough mark (StarterKit Strike)
-//   - `hr` : Horizontal rule (StarterKit HorizontalRule)
-//   - `a`  : Link mark (StarterKit v3 bundles @tiptap/extension-link)
-// `br` is included because Tiptap's hard-break (Shift+Enter) serializes to
-// <br>. Text alignment does NOT add a tag — it adds a `text-align` inline
-// style on the existing block tags (p/h2/h3), handled via allowedStyles
-// below. Still no `h1` (the Article title owns the page H1).
+// Block/inline tags the toolbar can produce.
+// Added in A10-B: `u` (Underline), `s` (Strike), `hr` (HorizontalRule),
+//   `a` (Link). `br` covers Tiptap hard-break (Shift+Enter). Text alignment
+//   adds a `text-align` inline style on p/h2/h3 (see allowedStyles), not a tag.
+// Added in A10-C:
+//   - `span` : carrier for TextStyle typography marks (font-size / font-family
+//     / color), all serialized as inline `style` on <span>.
+//   - `mark` : carrier for Highlight (background-color), serialized as inline
+//     `style` on <mark>.
+// Still no `h1` (the Article title owns the page H1).
 export const ARTICLE_ALLOWED_TAGS = [
   "p",
   "h2",
@@ -69,6 +83,8 @@ export const ARTICLE_ALLOWED_TAGS = [
   "hr",
   "a",
   "br",
+  "span",
+  "mark",
 ]
 
 // Attribute allowlist for A10-B.
@@ -84,11 +100,20 @@ export const ARTICLE_ALLOWED_TAGS = [
 //     surviving `style` to ONLY `text-align: left|center|right` — no other
 //     property (color/font/position/etc.) can pass, so exposing `style`
 //     here does NOT open an arbitrary-style channel.
+//   - `span`/`mark` (A10-C): `style` MUST be listed so the typography
+//     properties can survive to be narrowed by `allowedStyles` below (same
+//     sanitize-html semantics as the A10-B-FIX1 text-align fix). No other
+//     attribute is allowed on span/mark, so the Highlight extension's
+//     `data-color` is intentionally stripped — the authoritative color is
+//     the validated inline `background-color`, and Highlight round-trips
+//     losslessly from the raw style string on reload.
 export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
   a: ["href", "target", "rel"],
   p: ["style"],
   h2: ["style"],
   h3: ["style"],
+  span: ["style"],
+  mark: ["style"],
 }
 
 /**
@@ -122,14 +147,27 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
     allowedSchemes: ["http", "https", "mailto", "tel"],
     allowedSchemesByTag: {},
     allowProtocolRelative: false,
-    // ONLY the text-align property (from the TextAlign extension), and only
-    // the three approved values, on the block tags Tiptap emits it on.
-    // No other CSS property can survive — this is NOT an open style channel
-    // and MUST NOT be broadened for typography until the relevant A10 STEP.
+    // CLOSED style allowlist. sanitize-html matches each regex against the
+    // trimmed property value; anything not matched is dropped. These values
+    // MUST stay byte-identical to the editor dropdown constants in
+    // rich-text-editor.tsx (FONT_SIZES / FONT_FAMILIES / TEXT_COLORS /
+    // HIGHLIGHTS) — see the policy note at the top of this file.
     allowedStyles: {
+      // Block alignment (A10-B) — TextAlign emits text-align on p/h2/h3.
       p: { "text-align": [/^(left|center|right)$/] },
       h2: { "text-align": [/^(left|center|right)$/] },
       h3: { "text-align": [/^(left|center|right)$/] },
+      // Typography marks (A10-C) — TextStyle serializes font-size /
+      // font-family / color onto <span>. Each is a FIXED allowlist:
+      span: {
+        "font-size": [/^(0\.875|1\.25|1\.5)rem$/],
+        "font-family": [/^(serif|monospace)$/],
+        color: [/^#(262524|6b6a67|c2703d|3d4a5c|b3261e)$/i],
+      },
+      // Highlight (A10-C) — serialized as background-color onto <mark>.
+      mark: {
+        "background-color": [/^#(fef3c7|dcfce7|dbeafe|fce7f3|ffedd5)$/i],
+      },
     },
     // Article-specific safe link handling (see policy doc above).
     transformTags: {
