@@ -127,15 +127,40 @@ function Divider() {
 }
 
 /**
- * CONTROLLED TYPOGRAPHY PALETTES (A10-C).
+ * CONTROLLED TYPOGRAPHY PALETTES (A10-C, Font Family updated in
+ * A10-C-FONT-FAMILY-FIX1).
  *
  * These are the ONLY typography values the editor can produce. Each value is
- * a single canonical string (fixed rem / CSS generic keyword / #rrggbb hex)
- * so it round-trips byte-identically through save → DB → edit reload without
- * canonicalization drift, and requires NO CSS `var()` (which the sanitizer
- * rejects).
+ * a single canonical string so it round-trips byte-identically through
+ * save → DB → edit reload without canonicalization drift.
  *
- * They MUST stay byte-identical to the `allowedStyles` regexes in
+ * FONT_SIZES / TEXT_COLORS / HIGHLIGHTS stay fixed rem / #rrggbb literals
+ * with NO CSS `var()`.
+ *
+ * FONT_FAMILIES is the one deliberate, narrowly-scoped exception: 襯線體
+ * references `var(--font-noto-serif-tc)` — the SAME CSS custom property the
+ * rest of this app already uses for `--font-heading`/`--font-serif` in
+ * app/globals.css, set on `<html>` by the already-loaded `Noto_Serif_TC`
+ * `next/font` instance in app/layout.tsx. Bare generic `serif` was
+ * discovered (A10-C-FONT-FAMILY-DIAGNOSIS) to be visually IDENTICAL to
+ * every other generic CSS font keyword for Traditional Chinese, because
+ * most platforms map ALL generic families (serif/sans-serif/monospace) to
+ * the same single installed Han typeface — so switching Font Family had no
+ * visible effect on Chinese text. Referencing the app's own loaded font by
+ * its CSS variable is deterministic instead of relying on OS/browser
+ * per-script generic-family substitution. 等寬體 stays the bare `monospace`
+ * keyword rather than switching to this app's `--font-mono` token, because
+ * `--font-mono` (`var(--font-geist-mono), 'Geist Mono Fallback'`) is DEAD
+ * in this codebase — no `Geist_Mono` `next/font` call exists anywhere to
+ * define `--font-geist-mono` or the `'Geist Mono Fallback'` face, so an
+ * unresolvable inner `var()` with no fallback argument invalidates the
+ * whole declared value at computed-value time and the property would
+ * silently fall back to the inherited (non-monospace) font — a regression
+ * from the bare keyword, which already renders Latin/digits as monospace
+ * correctly today.
+ *
+ * This is still a CLOSED, fixed allowlist — not an open style channel. Each
+ * value MUST stay byte-identical to the `allowedStyles` regexes in
  * lib/articles/sanitize.ts. If they diverge, valid editor output would be
  * silently stripped on save. Update BOTH files together.
  */
@@ -145,7 +170,7 @@ const FONT_SIZES: ReadonlyArray<{ label: string; value: string }> = [
   { label: "特大", value: "1.5rem" },
 ]
 const FONT_FAMILIES: ReadonlyArray<{ label: string; value: string }> = [
-  { label: "襯線體", value: "serif" },
+  { label: "襯線體", value: "var(--font-noto-serif-tc), serif" },
   { label: "等寬體", value: "monospace" },
 ]
 const TEXT_COLORS: ReadonlyArray<{ label: string; value: string }> = [

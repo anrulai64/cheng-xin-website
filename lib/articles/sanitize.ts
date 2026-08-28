@@ -161,7 +161,17 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
       // font-family / color onto <span>. Each is a FIXED allowlist:
       span: {
         "font-size": [/^(0\.875|1\.25|1\.5)rem$/],
-        "font-family": [/^(serif|monospace)$/],
+        // Updated in A10-C-FONT-FAMILY-FIX1: 襯線體 now emits
+        // `var(--font-noto-serif-tc), serif` (this app's own already-loaded
+        // Noto Serif TC design token, mirroring `--font-serif` in
+        // app/globals.css) instead of the bare `serif` keyword, which was
+        // found to be visually indistinguishable from every other generic
+        // font keyword for Traditional Chinese text. This is still a tight
+        // ENUMERATED allowlist of exactly two literal strings — not a
+        // pattern that accepts arbitrary `var(...)` references — so no
+        // arbitrary font-family (or CSS injection via a crafted custom
+        // property name) can pass through Source mode.
+        "font-family": [/^(var\(--font-noto-serif-tc\), serif|monospace)$/],
         color: [/^#(262524|6b6a67|c2703d|3d4a5c|b3261e)$/i],
       },
       // Highlight (A10-C) — serialized as background-color onto <mark>.
