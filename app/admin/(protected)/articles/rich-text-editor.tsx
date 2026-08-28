@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useEditor, EditorContent, useEditorState, Extension } from "@tiptap/react"
-import type { Editor, SingleCommands } from "@tiptap/react"
+import type { CommandProps, Editor, SingleCommands } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { TextAlign } from "@tiptap/extension-text-align"
 // A10-C typography. In TipTap v3 the TextStyle mark plus its Color /
@@ -285,8 +285,8 @@ function Menu({
  *      specific case (`unsetAllMarks()` is a documented no-op on an empty
  *      selection).
  *
- * IMPORTANT correctness note (this is the exact bug an earlier version of
- * this extension had, which corrupted documents with duplicate/extra empty
+ * IMPORTANT correctness note #1 (the exact bug an earlier version of this
+ * extension had, which corrupted documents with duplicate/extra empty
  * paragraphs on nearly every Enter press, and had to be reverted):
  * `editor.chain()...run()` ALWAYS dispatches its transaction (that's a
  * side effect), but `run()`'s RETURN VALUE is `every command in the chain
@@ -305,6 +305,34 @@ function Menu({
  * one and only handler that should ever run a plain block split here,
  * exactly mirroring the precondition TipTap's own default Enter command
  * relies on before it calls `splitBlock()`.
+ *
+ * IMPORTANT correctness note #2 (a second, separate bug found via browser
+ * verification of note #1's fix — Enter silently did nothing at all when
+ * pressed anywhere except at the very end of a Heading): unconditionally
+ * calling `.setParagraph()` after every split throws
+ * `RangeError: Invalid content for node type hardBreak` whenever the
+ * block being split is ALREADY a paragraph (the common case — plain text,
+ * list-item paragraphs, blockquote paragraphs). Root cause is a quirk in
+ * `@tiptap/core`'s own `setNode()` command: it delegates the "is this
+ * already applicable" check to ProseMirror's `setBlockType()`, whose
+ * `node.hasMarkup(nodeType, attrs)` early-return treats "the block is
+ * ALREADY the target type" as "not applicable" (rather than "trivially
+ * done"), so `setNode()` wrongly falls through to its `clearNodes()`
+ * fallback path. `clearNodes()` then resolves a "default type" for that
+ * position via `contentMatchAt(...).defaultType` — which, on a node
+ * already satisfying its parent's content model, returns the schema's
+ * first fallback-constructible inline node (`hardBreak`, since `text`
+ * nodes cannot be created attribute-only) — and `tr.setNodeMarkup` throws
+ * because a block-level paragraph can never validly become a `hardBreak`.
+ * This exception aborted the whole handler before `unsetTextAlign()` and
+ * the stored-marks clear ever ran, which is why Enter appeared to do
+ * nothing: the browser silently swallowed the thrown error inside
+ * ProseMirror's keydown dispatch. Fix: capture whether the block being
+ * split was already a Paragraph BEFORE splitting, and only call
+ * `.setParagraph()` when it was NOT (i.e. only for Heading → Paragraph,
+ * which is the one case `splitBlock()` doesn't already handle correctly
+ * mid-text). Skipping the call when already a paragraph is both the fix
+ * and the semantically correct behavior — there is nothing to convert.
  */
 const CleanEnterOnReturn = Extension.create({
   name: "cleanEnterOnReturn",
@@ -335,18 +363,26 @@ const CleanEnterOnReturn = Extension.create({
         // Paragraph, default-aligned, with zero inline formatting. The
         // previous block (and its formatting) is left completely
         // untouched. We deliberately do NOT return the chain's aggregate
-        // boolean here — see the correctness note above. Once we reach
+        // boolean here — see correctness note #1 above. Once we reach
         // this branch we own the Enter keystroke unconditionally.
-        editor
-          .chain()
-          .splitBlock({ keepMarks: false })
-          .setParagraph()
-          .unsetTextAlign()
-          .command(({ tr }) => {
-            tr.setStoredMarks([])
-            return true
-          })
-          .run()
+        const wasAlreadyParagraph = editor.isActive("paragraph")
+
+        const chain = editor.chain().splitBlock({ keepMarks: false })
+
+        // Only force a Paragraph conversion when splitting out of a
+        // non-paragraph block (Heading). Calling `.setParagraph()` when
+        // already a paragraph triggers the `clearNodes()` crash described
+        // in correctness note #2 above — see there for the full mechanism.
+        if (!wasAlreadyParagraph) {
+          chain.setParagraph()
+        }
+
+        chain.unsetTextAlign().command(({ tr }: CommandProps) => {
+          tr.setStoredMarks([])
+          return true
+        })
+
+        chain.run()
 
         return true
       },
