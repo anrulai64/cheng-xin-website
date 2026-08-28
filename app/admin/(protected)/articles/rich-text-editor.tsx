@@ -12,6 +12,10 @@ import { TextAlign } from "@tiptap/extension-text-align"
 // styles that survive the server sanitizer — the sanitizer is authoritative.
 import { TextStyle, Color, FontSize, FontFamily } from "@tiptap/extension-text-style"
 import { Highlight } from "@tiptap/extension-highlight"
+// A10-C-LIST-ENTER-FIX1. Used ONLY by `ListEnterMarkReset` below to detect,
+// via public ProseMirror APIs, that a genuine native list-item split just
+// occurred, so this import must stay decoupled from `CleanEnterOnReturn`.
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state"
 import {
   AlignCenter,
   AlignLeft,
@@ -415,6 +419,107 @@ const CleanEnterOnReturn = Extension.create({
   },
 })
 
+/**
+ * A10-C-LIST-ENTER-FIX1.
+ *
+ * `CleanEnterOnReturn` (above) intentionally returns `false` inside
+ * Bullet/Ordered/List Item so TipTap's native `ListItem` keymap runs
+ * `splitListItem()` completely untouched — list continuation must stay
+ * 100% native. The one remaining bug: `splitListItem()`
+ * (@tiptap/core/commands/splitListItem.ts) unconditionally ends with
+ * `tr.ensureMarks(filteredMarks)`, which carries every splittable mark
+ * (Bold/Italic/Underline/Strike/Link/TextStyle — i.e. Font Size/Font
+ * Family/Text Color — /Highlight) forward as `EditorState.storedMarks`
+ * onto the brand-new empty list item. This happens entirely inside a
+ * DIFFERENT extension's keymap plugin, dispatched AFTER
+ * `CleanEnterOnReturn` already returned `false` and lost the keystroke —
+ * so it can only be fixed by observing the transaction after the fact via
+ * `appendTransaction`, never by intercepting Enter.
+ *
+ * Detection below is purely structural, using only public ProseMirror
+ * APIs, and requires ALL of the following simultaneously — so it cannot
+ * be confused with cursor movement, mouse clicks, ordinary typing, or a
+ * plain paragraph/heading Enter:
+ *
+ *   1. The incoming transaction(s) actually changed the document.
+ *   2. There are stored marks to clear at all (cheap early exit).
+ *   3. The resulting selection is a collapsed `TextSelection`.
+ *   4. The cursor sits inside a completely EMPTY `paragraph`.
+ *   5. That paragraph's immediate parent is a `listItem`, and that
+ *      `listItem`'s immediate parent is a `bulletList`/`orderedList`.
+ *   6. The cursor's position BEFORE the transaction (`oldState.selection`)
+ *      was ALSO inside a `listItem` inside a list of the SAME type (rules
+ *      out e.g. clicking from outside the list into an existing empty
+ *      item, which has no matching "old listItem").
+ *   7. The list node wrapping the new position has EXACTLY one more child
+ *      than the list node wrapping the old position had (rules out paste
+ *      of multiple items, or any edit that isn't a single-item split).
+ *   8. The new item's index inside that list is EXACTLY the old item's
+ *      index + 1 (the new empty item must be the immediate next sibling
+ *      of where the cursor used to be — rules out edits elsewhere in the
+ *      doc).
+ *
+ * `liftEmptyBlock()`'s empty-list-exit transaction (Enter on an empty list
+ * item lifts it OUT of the list into a top-level paragraph) fails check 5
+ * by construction — the resulting paragraph's parent is no longer a
+ * `listItem` — so the exit path is naturally excluded and untouched.
+ *
+ * Only `tr.setStoredMarks([])` is ever called — this clears ONLY the
+ * transient "marks the next typed character will use" and can never alter
+ * any existing document node/mark, so Item 1 (and the new item's own
+ * empty-paragraph node itself) are structurally untouched by construction.
+ * TextAlign is a node attribute, not a mark, and is intentionally left
+ * untouched here (out of scope for this fix).
+ */
+const ListEnterMarkReset = Extension.create({
+  name: "listEnterMarkReset",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("listEnterMarkReset"),
+        appendTransaction(transactions, oldState, newState) {
+          if (!transactions.some((tr) => tr.docChanged)) return null
+          if (!newState.storedMarks || newState.storedMarks.length === 0) return null
+
+          const { selection } = newState
+          if (!(selection instanceof TextSelection) || !selection.empty) return null
+
+          const { $from } = selection
+          if ($from.depth < 3) return null
+          if ($from.parent.type.name !== "paragraph" || $from.parent.content.size !== 0) return null
+
+          const listItemDepth = $from.depth - 1
+          const newListItem = $from.node(listItemDepth)
+          if (!newListItem || newListItem.type.name !== "listItem") return null
+
+          const newList = $from.node(listItemDepth - 1)
+          if (!newList || (newList.type.name !== "bulletList" && newList.type.name !== "orderedList")) return null
+
+          const oldSelection = oldState.selection
+          if (!(oldSelection instanceof TextSelection)) return null
+          const old$from = oldSelection.$from
+          if (old$from.depth < 3) return null
+
+          const oldListItemDepth = old$from.depth - 1
+          const oldListItem = old$from.node(oldListItemDepth)
+          if (!oldListItem || oldListItem.type.name !== "listItem") return null
+
+          const oldList = old$from.node(oldListItemDepth - 1)
+          if (!oldList || oldList.type.name !== newList.type.name) return null
+
+          if (newList.childCount !== oldList.childCount + 1) return null
+
+          const newIndex = $from.index(listItemDepth - 1)
+          const oldIndex = old$from.index(oldListItemDepth - 1)
+          if (newIndex !== oldIndex + 1) return null
+
+          return newState.tr.setStoredMarks([])
+        },
+      }),
+    ]
+  },
+})
+
 export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
@@ -455,6 +560,11 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       // extension's own doc comment above for why registration order
       // controls keymap precedence in TipTap).
       CleanEnterOnReturn,
+      // A10-C-LIST-ENTER-FIX1. Registration position is irrelevant here —
+      // unlike `CleanEnterOnReturn`, this extension owns no keymap binding
+      // at all; it only adds an `appendTransaction` ProseMirror plugin, so
+      // it cannot compete with or change Enter dispatch order.
+      ListEnterMarkReset,
     ],
     content: value,
     editorProps: {
