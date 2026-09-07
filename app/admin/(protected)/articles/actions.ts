@@ -234,18 +234,6 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
   await requireAdmin()
   const supabase = await createClient()
 
-  // TEMP-A10-C-TRACE — TRACE POINT 1. Logs ONLY the raw content_html string
-  // exactly as received from the client FormData, before any normalization
-  // or sanitization runs. No other field, token, session, or credential is
-  // logged. Remove this block once the two-point trace is complete.
-  {
-    const rawContentHtmlTrace = formData.get("content_html")
-    console.log(
-      "[v0] TEMP-A10-C-TRACE-1 (Server Action input content_html):",
-      typeof rawContentHtmlTrace === "string" ? rawContentHtmlTrace : String(rawContentHtmlTrace),
-    )
-  }
-
   let fields: Fields | { error: string }
   try {
     fields = readFields(formData)
@@ -325,23 +313,6 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
   }
   if (!updated || updated.length === 0) {
     return { ok: false, error: "文章不存在或已被刪除。" }
-  }
-
-  // TEMP-A10-C-TRACE — TRACE POINT 2. Reads back ONLY content_html for this
-  // row, via the existing authenticated server-side Supabase client (no
-  // service_role, no new query path). Logs ONLY that one field. Remove this
-  // block once the two-point trace is complete.
-  {
-    const { data: traceReadBack, error: traceReadBackError } = await supabase
-      .from("articles")
-      .select("content_html")
-      .eq("id", id)
-      .single()
-    if (traceReadBackError) {
-      console.log("[v0] TEMP-A10-C-TRACE-2 (DB read-back failed):", traceReadBackError.message)
-    } else {
-      console.log("[v0] TEMP-A10-C-TRACE-2 (DB read-back content_html):", traceReadBack?.content_html ?? null)
-    }
   }
 
   revalidatePath(LIST_PATH)
