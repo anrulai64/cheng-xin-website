@@ -12,6 +12,11 @@ import { TextAlign } from "@tiptap/extension-text-align"
 // styles that survive the server sanitizer — the sanitizer is authoritative.
 import { TextStyle, Color, FontSize, FontFamily } from "@tiptap/extension-text-style"
 import { Highlight } from "@tiptap/extension-highlight"
+// A10-D. Table/TableRow/TableHeader/TableCell are the four node types the
+// toolbar below can produce. `resizable: false` is a deliberate V1 scope
+// limit (see the Table menu below and lib/articles/sanitize.ts) — no
+// colgroup/col markup, no drag-resize handles, no column-width styling.
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 // A10-C-LIST-ENTER-FIX1. Used ONLY by `ListEnterMarkReset` below to detect,
 // via public ProseMirror APIs, that a genuine native list-item split just
 // occurred, so this import must stay decoupled from `CleanEnterOnReturn`.
@@ -37,6 +42,7 @@ import {
   Quote,
   Redo2,
   Strikethrough,
+  Table2,
   Type,
   Underline as UnderlineIcon,
   Undo2,
@@ -555,6 +561,15 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       FontSize,
       FontFamily,
       Highlight.configure({ multicolor: true }),
+      // A10-D. Column resizing is out of scope for V1 (see toolbar comment
+      // below) — resizable: false keeps table HTML free of colgroup/col and
+      // any drag-resize DOM/CSS. TableRow/TableHeader/TableCell take no
+      // options; registration order among these four is irrelevant since
+      // none of them owns an Enter/keymap binding.
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       // A10-C-FIX4. Must stay LAST so its Enter binding is tried before
       // StarterKit's list/blockquote/paragraph Enter bindings (see the
       // extension's own doc comment above for why registration order
@@ -594,6 +609,10 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       isOrdered: e?.isActive("orderedList") ?? false,
       isQuote: e?.isActive("blockquote") ?? false,
       isLink: e?.isActive("link") ?? false,
+      // A10-D. True whenever the selection is inside a table (any cell).
+      // Drives both the Table menu button's active indicator and the
+      // disabled state of every row/column/header/delete-table command.
+      inTable: e?.isActive("table") ?? false,
       isLeft: e?.isActive({ textAlign: "left" }) ?? false,
       isCenter: e?.isActive({ textAlign: "center" }) ?? false,
       isRight: e?.isActive({ textAlign: "right" }) ?? false,
@@ -737,6 +756,89 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
             <TB title="水平分隔線" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>
               <Minus className="size-4" />
             </TB>
+            <Divider />
+            {/* Table (A10-D). Insert Table always works; every other command
+                only makes sense with the selection inside a table, so those
+                are disabled (non-destructive no-ops) otherwise rather than
+                hidden — consistent with e.g. the Unlink button above. Merge
+                Cells, Split Cell, and column/row resizing are deliberately
+                NOT offered here (V1 scope decision, mirrored by the server
+                sanitizer's tag/attribute allowlist). */}
+            <Menu icon={<Table2 className="size-4" />} title="表格" active={state?.inTable}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                >
+                  插入 3×3 表格
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().addRowBefore().run()}
+                >
+                  新增上方列
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().addRowAfter().run()}
+                >
+                  新增下方列
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().deleteRow().run()}
+                >
+                  刪除目前列
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().addColumnBefore().run()}
+                >
+                  新增左側欄
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().addColumnAfter().run()}
+                >
+                  新增右側欄
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().deleteColumn().run()}
+                >
+                  刪除目前欄
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().toggleHeaderRow().run()}
+                >
+                  切換標題列
+                </button>
+                <button
+                  type="button"
+                  disabled={!state?.inTable}
+                  className="rounded px-2 py-1 text-left text-sm text-destructive hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  onClick={() => editor?.chain().focus().deleteTable().run()}
+                >
+                  刪除表格
+                </button>
+              </div>
+            </Menu>
             <Divider />
             {/* Align */}
             <TB title="靠左對齊" active={state?.isLeft} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>

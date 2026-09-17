@@ -50,9 +50,19 @@ import sanitizeHtml from "sanitize-html"
  * rich-text-editor.tsx) or valid editor output would be silently dropped on
  * save — update BOTH files together.
  *
- * A10-C deliberately still does NOT allow: img, iframe/YouTube, table (and
- * its th/td/thead/tbody/colgroup/col). Those belong to later A10 STEPS and
- * MUST NOT be pre-enabled here.
+ * A10-C deliberately still does NOT allow: img, iframe/YouTube. Those belong
+ * to later A10 STEPS and MUST NOT be pre-enabled here.
+ *
+ * A10-D adds Table V1: table/tbody/tr/th/td ONLY — no thead, no tfoot, no
+ * colgroup/col (the editor's Table extension runs with resizable: false, so
+ * it never emits column-width markup), and no attributes on any table tag
+ * (no colspan/rowspan/scope/style/class/data-*). Merge Cells, Split Cell,
+ * and column/row resizing are all deliberately out of scope for V1 and are
+ * NOT reachable from the toolbar (see rich-text-editor.tsx) — this is a
+ * strict minimum-surface policy, not an oversight. Widening it (e.g. to
+ * allow colspan/rowspan) requires enabling the corresponding editor command
+ * AND updating this allowlist together, exactly like every other toolbar
+ * feature in this file.
  *
  * Do NOT broaden this allowlist without updating both the Admin editor
  * toolbar and this comment in the same change.
@@ -85,6 +95,13 @@ export const ARTICLE_ALLOWED_TAGS = [
   "br",
   "span",
   "mark",
+  // A10-D Table V1 — deliberately just these five. No thead/tfoot/colgroup/
+  // col (see policy note above).
+  "table",
+  "tbody",
+  "tr",
+  "th",
+  "td",
 ]
 
 // Attribute allowlist for A10-B.
