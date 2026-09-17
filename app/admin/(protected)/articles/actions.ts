@@ -61,10 +61,20 @@ type Fields = {
  *   4. Otherwise, store the sanitized HTML string.
  */
 function normalizeContentHtml(raw: string): string | null {
+  // TEMP A10-C-COLOR-TRACE — remove after the human captures both trace
+  // points from Vercel Runtime Logs. Logs ONLY content_html; no auth,
+  // cookies, or unrelated form fields.
+  console.log("[A10C-COLOR-TRACE-1-RAW]", raw)
+
   if (isEmptyArticleHtml(raw)) return null
 
   const sanitized = sanitizeArticleContentHtml(raw)
   if (isEmptyArticleHtml(sanitized)) return null
+
+  // TEMP A10-C-COLOR-TRACE — remove after the human captures both trace
+  // points from Vercel Runtime Logs.
+  console.log("[A10C-COLOR-TRACE-2-NORMALIZED]", sanitized)
+
   return sanitized
 }
 
