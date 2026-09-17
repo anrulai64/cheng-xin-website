@@ -60,23 +60,14 @@ type Fields = {
  *      NULL, so we never store a dangerous or meaningless body.
  *   4. Otherwise, store the sanitized HTML string.
  */
-function normalizeContentHtml(raw: string): string | null {
-  // TEMP A10-C-COLOR-TRACE — remove after the human captures both trace
-  // points from Vercel Runtime Logs. Logs ONLY content_html; no auth,
-  // cookies, or unrelated form fields.
-  console.log("[A10C-COLOR-TRACE-1-RAW]", raw)
+  function normalizeContentHtml(raw: string): string | null {
+    if (isEmptyArticleHtml(raw)) return null
 
-  if (isEmptyArticleHtml(raw)) return null
+    const sanitized = sanitizeArticleContentHtml(raw)
+    if (isEmptyArticleHtml(sanitized)) return null
 
-  const sanitized = sanitizeArticleContentHtml(raw)
-  if (isEmptyArticleHtml(sanitized)) return null
-
-  // TEMP A10-C-COLOR-TRACE — remove after the human captures both trace
-  // points from Vercel Runtime Logs.
-  console.log("[A10C-COLOR-TRACE-2-NORMALIZED]", sanitized)
-
-  return sanitized
-}
+    return sanitized
+  }
 
 /** Read + normalize the Article form fields. Returns a field-level error string on failure. */
 function readFields(formData: FormData): Fields | { error: string } {

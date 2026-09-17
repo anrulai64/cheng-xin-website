@@ -172,7 +172,22 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
         // arbitrary font-family (or CSS injection via a crafted custom
         // property name) can pass through Source mode.
         "font-family": [/^(var\(--font-noto-serif-tc\), serif|monospace)$/],
-        color: [/^#(262524|6b6a67|c2703d|3d4a5c|b3261e)$/i],
+        // Updated in A10-C-TEXT-COLOR-PERSISTENCE-FIX1: browsers (via
+        // Tiptap's TextStyle mark) serialize an applied `color` as
+        // `rgb(r, g, b)`, not the hex string the toolbar's swatch `value`
+        // is defined in — so the hex-only regex was silently stripping
+        // every color choice on save. This accepts BOTH the hex form (for
+        // hand-written Source mode input) AND the exact rgb() serialization
+        // of each of the same 5 approved colors, with optional whitespace
+        // after each comma (matching browser `getComputedStyle` output).
+        // This is still a closed, enumerated palette — not a general rgb()
+        // pattern — so no arbitrary color (and no rgba()/named/var() color)
+        // can pass. The two forms MUST stay in sync with each other and
+        // with TEXT_COLORS in rich-text-editor.tsx.
+        color: [
+          /^#(262524|6b6a67|c2703d|3d4a5c|b3261e)$/i,
+          /^rgb\(\s*(38,\s*37,\s*36|107,\s*106,\s*103|194,\s*112,\s*61|61,\s*74,\s*92|179,\s*38,\s*30)\s*\)$/,
+        ],
       },
       // Highlight (A10-C) — serialized as background-color onto <mark>.
       mark: {
