@@ -711,7 +711,7 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
 
       {mode === "visual" ? (
         <>
-          <div className="flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5">
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5">
             {/* Block */}
             <TB title="內文段落" active={state?.isParagraph} onClick={() => editor?.chain().focus().setParagraph().run()}>
               <Pilcrow className="size-4" />

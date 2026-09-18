@@ -339,7 +339,7 @@ export function ArticleForm({
       </Card>
 
       {/* Content */}
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader>
           <CardTitle className="text-base">文章內容</CardTitle>
         </CardHeader>
