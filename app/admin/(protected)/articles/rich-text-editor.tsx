@@ -712,8 +712,10 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       {mode === "visual" ? (
         <>
           <div
-            data-editor-sticky-toolbar="true"
-            className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5 outline outline-2 outline-red-500"
+            className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5"
+            // Explicit inline position is intentional; runtime testing showed Chromium did
+            // not activate sticky behavior reliably from the utility class alone.
+            style={{ position: "sticky" }}
           >
             {/* Block */}
             <TB title="內文段落" active={state?.isParagraph} onClick={() => editor?.chain().focus().setParagraph().run()}>
