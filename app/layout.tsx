@@ -3,9 +3,7 @@ import type { Metadata } from 'next'
 import { Noto_Sans_TC, Noto_Serif_TC } from 'next/font/google'
 import './globals.css'
 import { siteConfig } from '@/lib/site-data'
-import { SiteHeader } from '@/components/site-header'
-import { SiteFooter } from '@/components/site-footer'
-import { FloatingContact } from '@/components/floating-contact'
+import { PublicSiteChrome } from '@/components/public-site-chrome'
 import { OrganizationSchema } from '@/components/structured-data'
 
 const notoSansTC = Noto_Sans_TC({
@@ -72,10 +70,7 @@ export default function RootLayout({
     >
       <body className="font-sans antialiased">
         <OrganizationSchema />
-        <SiteHeader />
-        {children}
-        <SiteFooter />
-        <FloatingContact />
+        <PublicSiteChrome>{children}</PublicSiteChrome>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

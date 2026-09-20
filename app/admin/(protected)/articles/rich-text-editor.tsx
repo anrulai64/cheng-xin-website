@@ -526,50 +526,10 @@ const ListEnterMarkReset = Extension.create({
   },
 })
 
-// EDITOR-UX-01-PROBE. Temporary diagnostic-only helper for the sticky-toolbar
-// investigation. Reads runtime geometry/computed-style off a live DOM node —
-// no layout or sticky behavior is touched. Removed once UX-H1 is resolved.
-function readProbeGeometry(el: Element, label: string) {
-  const rect = el.getBoundingClientRect()
-  const cs = window.getComputedStyle(el)
-  return {
-    label,
-    tag: el.tagName.toLowerCase(),
-    className: (el as HTMLElement).className || "",
-    top: rect.top,
-    bottom: rect.bottom,
-    height: rect.height,
-    position: cs.position,
-    topStyle: cs.top,
-    display: cs.display,
-    overflow: cs.overflow,
-    overflowX: cs.overflowX,
-    overflowY: cs.overflowY,
-    transform: cs.transform,
-    contain: cs.contain,
-  }
-}
-
-type ProbeGeometry = ReturnType<typeof readProbeGeometry>
-
-type ProbeSnapshot = {
-  ancestors: ProbeGeometry[]
-  scrollY: number
-  innerHeight: number
-  scrollHeight: number
-}
-
 export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
   const [notice, setNotice] = React.useState<string | null>(null)
-
-  // EDITOR-UX-01-PROBE. toolbarProbeRef marks the exact sticky toolbar node
-  // under investigation; probeSnapshot mirrors it and every DOM ancestor up
-  // to <body> each animation frame so the human can screenshot it instead of
-  // opening Chrome DevTools. Diagnostic only — see removal note above.
-  const toolbarProbeRef = React.useRef<HTMLDivElement>(null)
-  const [probeSnapshot, setProbeSnapshot] = React.useState<ProbeSnapshot | null>(null)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -692,41 +652,6 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
     onChange(next)
   }
 
-  // EDITOR-UX-01-PROBE. Diagnostic-only rAF loop: on every animation frame
-  // while the visual editor is mounted, walk from the toolbar node up through
-  // every DOM ancestor to <body> and snapshot geometry/computed-style for
-  // each. Intentionally does not read or write any layout-affecting property
-  // — pure measurement. See removal note on readProbeGeometry above.
-  React.useEffect(() => {
-    if (mode !== "visual") return
-    let rafId: number
-
-    function measure() {
-      const toolbarEl = toolbarProbeRef.current
-      if (toolbarEl) {
-        const ancestors: ProbeGeometry[] = []
-        let node: Element | null = toolbarEl
-        let depth = 0
-        while (node && depth < 20) {
-          ancestors.push(readProbeGeometry(node, depth === 0 ? "① 工具列本身" : `祖先 #${depth}`))
-          if (node === document.body) break
-          node = node.parentElement
-          depth++
-        }
-        setProbeSnapshot({
-          ancestors,
-          scrollY: window.scrollY,
-          innerHeight: window.innerHeight,
-          scrollHeight: document.documentElement.scrollHeight,
-        })
-      }
-      rafId = window.requestAnimationFrame(measure)
-    }
-
-    rafId = window.requestAnimationFrame(measure)
-    return () => window.cancelAnimationFrame(rafId)
-  }, [mode])
-
   function setLink() {
     if (!editor) return
     const prev = editor.getAttributes("link").href as string | undefined
@@ -786,13 +711,7 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
 
       {mode === "visual" ? (
         <>
-          <div
-            ref={toolbarProbeRef}
-            className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5"
-            // Explicit inline position is intentional; runtime testing showed Chromium did
-            // not activate sticky behavior reliably from the utility class alone.
-            style={{ position: "sticky" }}
-          >
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5">
             {/* Block */}
             <TB title="內文段落" active={state?.isParagraph} onClick={() => editor?.chain().focus().setParagraph().run()}>
               <Pilcrow className="size-4" />
@@ -1058,42 +977,6 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
         </p>
       ) : null}
 
-      {/* EDITOR-UX-01-PROBE. Temporary diagnostic panel, fixed to the
-          viewport (out of normal flow) so it cannot influence the editor's
-          own layout or the sticky behavior under investigation. Remove this
-          block once UX-H1 is resolved. */}
-      {mode === "visual" && probeSnapshot ? (
-        <div
-          className="fixed bottom-2 right-2 z-[9999] max-h-[70vh] w-[22rem] overflow-y-auto rounded-md border border-yellow-500 bg-black/90 p-2 font-mono text-[10px] leading-tight text-yellow-200 shadow-lg"
-          aria-hidden="true"
-        >
-          <p className="mb-1 text-xs font-bold text-yellow-300">EDITOR UX-01 GEOMETRY PROBE</p>
-          <p className="mb-2">
-            scrollY: {probeSnapshot.scrollY.toFixed(1)} · innerHeight: {probeSnapshot.innerHeight} · scrollHeight:{" "}
-            {probeSnapshot.scrollHeight}
-          </p>
-          {probeSnapshot.ancestors.map((a, i) => (
-            <div key={i} className="mb-1.5 border-t border-yellow-500/30 pt-1">
-              <p className="font-semibold text-yellow-100">
-                {a.label} &lt;{a.tag}&gt;
-                {a.className ? ` .${a.className.split(" ").slice(0, 3).join(".")}` : ""}
-              </p>
-              <p>
-                top: {a.top.toFixed(1)} / bottom: {a.bottom.toFixed(1)} / h: {a.height.toFixed(1)}
-              </p>
-              <p>
-                pos: {a.position} / top-css: {a.topStyle} / disp: {a.display}
-              </p>
-              <p>
-                ovf: {a.overflow} / x: {a.overflowX} / y: {a.overflowY}
-              </p>
-              <p>
-                transform: {a.transform} / contain: {a.contain}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }
