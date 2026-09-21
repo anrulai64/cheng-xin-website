@@ -683,35 +683,35 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
 
   return (
     <div className="rounded-lg border border-input bg-background">
-      {/* Mode switch */}
-      <div className="flex items-center gap-1 border-b px-2 py-1.5">
-        <button
-          type="button"
-          onClick={() => mode !== "visual" && switchToVisual()}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
-            mode === "visual" ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted",
-          )}
-        >
-          <Eye className="size-3.5" />
-          視覺編輯
-        </button>
-        <button
-          type="button"
-          onClick={() => mode !== "source" && switchToSource()}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
-            mode === "source" ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted",
-          )}
-        >
-          <Code className="size-3.5" />
-          HTML 原始碼
-        </button>
-      </div>
+      <div className="sticky top-0 z-10 bg-background">
+        {/* Mode switch */}
+        <div className="flex items-center gap-1 border-b px-2 py-1.5">
+          <button
+            type="button"
+            onClick={() => mode !== "visual" && switchToVisual()}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
+              mode === "visual" ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <Eye className="size-3.5" />
+            視覺編輯
+          </button>
+          <button
+            type="button"
+            onClick={() => mode !== "source" && switchToSource()}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
+              mode === "source" ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <Code className="size-3.5" />
+            HTML 原始碼
+          </button>
+        </div>
 
-      {mode === "visual" ? (
-        <>
-          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5">
+        {mode === "visual" && (
+          <div className="flex flex-wrap items-center gap-0.5 border-b bg-background px-2 py-1.5">
             {/* Block */}
             <TB title="內文段落" active={state?.isParagraph} onClick={() => editor?.chain().focus().setParagraph().run()}>
               <Pilcrow className="size-4" />
@@ -955,9 +955,11 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
               <Redo2 className="size-4" />
             </TB>
           </div>
+        )}
+      </div>
 
-          <EditorContent editor={editor} className="px-3 py-2" />
-        </>
+      {mode === "visual" ? (
+        <EditorContent editor={editor} className="px-3 py-2" />
       ) : (
         <textarea
           aria-label={`${ariaLabel ?? "文章內容"} HTML 原始碼`}
