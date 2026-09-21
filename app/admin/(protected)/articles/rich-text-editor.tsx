@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useEditor, EditorContent, useEditorState, Extension } from "@tiptap/react"
+import { useEditor, EditorContent, useEditorState, Extension, Node as TiptapNode } from "@tiptap/react"
 import type { CommandProps, Editor, SingleCommands } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { TextAlign } from "@tiptap/extension-text-align"
@@ -47,6 +47,7 @@ import {
   Underline as UnderlineIcon,
   Undo2,
   Unlink,
+  Video as YoutubeIcon,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -526,6 +527,116 @@ const ListEnterMarkReset = Extension.create({
   },
 })
 
+/**
+ * A10-E — YouTube Embed V1.
+ *
+ * A single canonical VIDEO_ID pattern shared by:
+ *   - `extractYouTubeVideoId` below (editor-side URL parsing on insert), and
+ *   - the server sanitizer's iframe validation (lib/articles/sanitize.ts),
+ * which MUST stay byte-identical to this regex.
+ */
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
+
+/**
+ * Parses a user-pasted URL into a canonical 11-character YouTube video ID,
+ * or `null` if the URL is not a recognized YouTube watch/share/shorts/embed
+ * form. This is a CLIENT-SIDE UX convenience only — it is NOT the security
+ * boundary. The authoritative validation is the server sanitizer's iframe
+ * src rebuild in lib/articles/sanitize.ts, which independently re-derives
+ * and re-validates the video ID from scratch before persistence.
+ *
+ * Supported input forms (STEP A10-E spec):
+ *   - https://www.youtube.com/watch?v=VIDEO_ID
+ *   - https://youtu.be/VIDEO_ID
+ *   - https://www.youtube.com/shorts/VIDEO_ID
+ *   - https://www.youtube.com/embed/VIDEO_ID
+ *   - https://www.youtube-nocookie.com/embed/VIDEO_ID (already-canonical form)
+ * Any other hostname, protocol, or path shape returns `null`.
+ */
+function extractYouTubeVideoId(rawUrl: string): string | null {
+  let url: URL
+  try {
+    url = new URL(rawUrl.trim())
+  } catch {
+    return null
+  }
+  if (url.protocol !== "https:") return null
+
+  const host = url.hostname.toLowerCase()
+  const path = url.pathname
+  let id: string | null = null
+
+  if (host === "youtu.be") {
+    id = path.slice(1).split("/")[0] || null
+  } else if (host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") {
+    if (path === "/watch") {
+      id = url.searchParams.get("v")
+    } else if (path.startsWith("/shorts/")) {
+      id = path.slice("/shorts/".length).split("/")[0] || null
+    } else if (path.startsWith("/embed/")) {
+      id = path.slice("/embed/".length).split("/")[0] || null
+    }
+  } else if (host === "www.youtube-nocookie.com" || host === "youtube-nocookie.com") {
+    if (path.startsWith("/embed/")) {
+      id = path.slice("/embed/".length).split("/")[0] || null
+    }
+  }
+
+  if (!id || !YOUTUBE_VIDEO_ID_PATTERN.test(id)) return null
+  return id
+}
+
+/**
+ * A10-E — minimal, YouTube-specific TipTap Node. This is deliberately NOT a
+ * generic iframe node: `parseHTML` recognizes ONLY the canonical
+ * `iframe.youtube-embed` shape this CMS itself produces (or the server
+ * sanitizer preserves), and `renderHTML` always rebuilds that exact shape
+ * from the stored `videoId` attribute — the semantic Node attribute is the
+ * video ID, never a raw URL or arbitrary iframe markup.
+ */
+const Youtube = TiptapNode.create({
+  name: "youtube",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: false,
+
+  addAttributes() {
+    return {
+      videoId: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-video-id"),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "iframe.youtube-embed",
+        getAttrs: (el) => {
+          if (!(el instanceof HTMLElement)) return false
+          const videoId = extractYouTubeVideoId(el.getAttribute("src") ?? "")
+          return videoId ? { videoId } : false
+        },
+      },
+    ]
+  },
+
+  renderHTML({ node }) {
+    const videoId = node.attrs.videoId as string
+    return [
+      "iframe",
+      {
+        class: "youtube-embed",
+        src: `https://www.youtube-nocookie.com/embed/${videoId}`,
+        title: "YouTube video player",
+        allowfullscreen: "true",
+      },
+    ]
+  },
+})
+
 export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
@@ -570,6 +681,9 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       TableRow,
       TableHeader,
       TableCell,
+      // A10-E. Minimal custom YouTube block node — see its own doc comment
+      // above for why this is NOT a generic iframe node.
+      Youtube,
       // A10-C-FIX4. Must stay LAST so its Enter binding is tried before
       // StarterKit's list/blockquote/paragraph Enter bindings (see the
       // extension's own doc comment above for why registration order
@@ -679,6 +793,26 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       .extendMarkRange("link")
       .setLink(isExternal ? { href: trimmed, target: "_blank" } : { href: trimmed, target: null })
       .run()
+  }
+
+  // A10-E — insert a YouTube embed. Strictly parses the pasted URL into a
+  // canonical video ID client-side and rejects anything that doesn't match;
+  // no arbitrary HTML/iframe is ever inserted. The server sanitizer
+  // independently re-validates and rebuilds the iframe from scratch before
+  // persistence, so this is a UX guard, not the security boundary.
+  function insertYoutube() {
+    if (!editor) return
+    const url = window.prompt("請輸入 YouTube 影片網址")
+    if (url === null) return
+    const trimmed = url.trim()
+    if (trimmed === "") return
+    const videoId = extractYouTubeVideoId(trimmed)
+    if (!videoId) {
+      setNotice("無法辨識這個 YouTube 網址，請確認網址格式正確。")
+      return
+    }
+    setNotice(null)
+    editor.chain().focus().insertContent({ type: "youtube", attrs: { videoId } }).run()
   }
 
   return (
@@ -839,6 +973,13 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
                 </button>
               </div>
             </Menu>
+            <Divider />
+            {/* YouTube (A10-E). window.prompt() based insert — see
+                insertYoutube() above for the strict URL parse/validate/reject
+                flow. No arbitrary iframe/HTML is ever inserted client-side. */}
+            <TB title="插入 YouTube" onClick={insertYoutube}>
+              <YoutubeIcon className="size-4" />
+            </TB>
             <Divider />
             {/* Align */}
             <TB title="靠左對齊" active={state?.isLeft} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>

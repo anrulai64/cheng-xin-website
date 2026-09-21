@@ -436,3 +436,16 @@
 .article-content td p {
   margin-top: 0;
 }
+/*
+ * A10-E: YouTube Embed V1. The sanitizer only ever persists the single
+ * canonical `iframe.youtube-embed` shape (see lib/articles/sanitize.ts), so
+ * a plain tag+class selector is enough — no wrapper div is required or
+ * emitted. `aspect-ratio` keeps the embed responsive at a fixed 16:9 on any
+ * viewport width without a fixed pixel height.
+ */
+.article-content iframe.youtube-embed {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}

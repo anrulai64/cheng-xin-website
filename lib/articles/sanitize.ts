@@ -64,6 +64,17 @@ import sanitizeHtml from "sanitize-html"
  * AND updating this allowlist together, exactly like every other toolbar
  * feature in this file.
  *
+ * A10-E adds YouTube Embed V1: a SINGLE canonical `iframe.youtube-embed`
+ * shape, not a generic iframe allowance. See `transformTags.iframe` below —
+ * every surviving iframe's attributes are REBUILT FROM SCRATCH from a
+ * freshly-validated YouTube video ID; nothing from the incoming iframe
+ * (attributes, class, or otherwise) is trusted or copied through. Any
+ * iframe that does not resolve to a valid `youtube-nocookie.com/embed/`
+ * video ID — including non-YouTube hosts, `javascript:`/`data:`/`srcdoc`
+ * payloads, and malformed video IDs — is dropped entirely by
+ * `exclusiveFilter` below, never passed through with partial/blanked
+ * attributes.
+ *
  * Do NOT broaden this allowlist without updating both the Admin editor
  * toolbar and this comment in the same change.
  */
@@ -102,6 +113,11 @@ export const ARTICLE_ALLOWED_TAGS = [
   "tr",
   "th",
   "td",
+  // A10-E — the ONLY iframe shape this allowlist permits is the canonical
+  // YouTube embed rebuilt by `transformTags.iframe` below. See that
+  // transform and `exclusiveFilter` for the actual security boundary; this
+  // tag entry alone does not widen the contract to arbitrary iframes.
+  "iframe",
 ]
 
 // Attribute allowlist for A10-B.
@@ -131,6 +147,50 @@ export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttribute
   h3: ["style"],
   span: ["style"],
   mark: ["style"],
+  // A10-E — only the exact attributes the canonical YouTube iframe needs.
+  // `transformTags.iframe` below REBUILDS these from scratch for every
+  // surviving iframe, so listing them here does not let an attacker pass
+  // arbitrary values through — it only lets our own rebuilt values survive.
+  iframe: ["src", "title", "class", "allowfullscreen"],
+}
+
+/**
+ * A10-E — canonical YouTube video ID shape, byte-identical to the editor's
+ * own `YOUTUBE_VIDEO_ID_PATTERN` in rich-text-editor.tsx. Keep both in sync.
+ */
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
+
+/** Embed hostnames accepted as INPUT. Output is always rewritten to the
+ * privacy-enhanced `www.youtube-nocookie.com` domain — see
+ * `extractYoutubeVideoIdFromEmbedSrc` below. */
+const YOUTUBE_EMBED_INPUT_HOSTNAMES = new Set(["www.youtube-nocookie.com", "www.youtube.com"])
+
+/**
+ * Validates an incoming iframe `src` and, if and only if it is EXACTLY a
+ * YouTube embed URL for a well-formed video ID, returns that video ID.
+ * Returns `null` for anything else — including non-YouTube hosts, non-https
+ * protocols (`javascript:`, `data:`, etc.), non-`/embed/` paths (e.g. a raw
+ * `/watch?v=` URL used directly as an iframe src), and malformed IDs.
+ *
+ * This is the ACTUAL security boundary for A10-E iframe support — NOT
+ * `allowedIframeHostnames` (see `sanitizeArticleContentHtml` below, which
+ * sets that option too, purely as defense-in-depth on top of this check,
+ * per the "do not rely only on allowedIframeHostnames" policy).
+ */
+function extractYoutubeVideoIdFromEmbedSrc(rawSrc: string): string | null {
+  let url: URL
+  try {
+    url = new URL(rawSrc)
+  } catch {
+    return null
+  }
+  if (url.protocol !== "https:") return null
+  if (!YOUTUBE_EMBED_INPUT_HOSTNAMES.has(url.hostname.toLowerCase())) return null
+  if (!url.pathname.startsWith("/embed/")) return null
+
+  const videoId = url.pathname.slice("/embed/".length).split("/")[0]
+  if (!videoId || !YOUTUBE_VIDEO_ID_PATTERN.test(videoId)) return null
+  return videoId
 }
 
 /**
@@ -240,9 +300,36 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
         }
         return { tagName, attribs: out }
       },
+      // A10-E — REBUILD, do not pass through. For every incoming `iframe`,
+      // independently re-derive a YouTube video ID from `src` and, if valid,
+      // replace ALL attributes with the exact canonical set below (ignoring
+      // whatever `class`/other attributes the incoming markup carried — the
+      // incoming `class` is NEVER trusted). If no valid video ID can be
+      // derived, strip the attributes down to nothing, which never matches
+      // the canonical `youtube-embed` class `exclusiveFilter` requires below
+      // — so the tag (and its inbound attributes) is dropped entirely, not
+      // left behind as an empty/partial iframe.
+      iframe: (tagName, attribs) => {
+        const videoId = extractYoutubeVideoIdFromEmbedSrc(attribs.src ?? "")
+        const out: sanitizeHtml.IFrame["attribs"] = videoId
+          ? {
+              class: "youtube-embed",
+              src: `https://www.youtube-nocookie.com/embed/${videoId}`,
+              title: "YouTube video player",
+              allowfullscreen: "true",
+            }
+          : {}
+        return { tagName, attribs: out }
+      },
     },
-    // No iframe support in A10-B.
-    allowedIframeHostnames: [],
+    // A10-E — final removal pass for any iframe that didn't survive
+    // `transformTags.iframe` as the exact canonical YouTube shape (invalid
+    // host/protocol/path/video ID). This fully excludes the tag rather than
+    // leaving an empty or partially-stripped iframe behind.
+    exclusiveFilter: (frame) => frame.tag === "iframe" && frame.attribs.class !== "youtube-embed",
+    // Defense-in-depth on top of the `transformTags.iframe` rebuild above —
+    // NOT the primary security boundary (see that function's doc comment).
+    allowedIframeHostnames: ["www.youtube-nocookie.com"],
     parser: {
       lowerCaseAttributeNames: true,
     },
