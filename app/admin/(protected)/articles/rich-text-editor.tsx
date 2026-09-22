@@ -17,6 +17,13 @@ import { Highlight } from "@tiptap/extension-highlight"
 // limit (see the Table menu below and lib/articles/sanitize.ts) — no
 // colgroup/col markup, no drag-resize handles, no column-width styling.
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
+// A10-F. Stock TipTap Image node, used AS-IS (no custom node needed, unlike
+// A10-E's Youtube). `HTMLAttributes` is deliberately left empty — no
+// editor-only class/style is added — so the editor's `<img src alt>` output
+// shape matches exactly what the server sanitizer's canonical A10-F
+// contract expects (see lib/articles/sanitize.ts). `allowBase64: false`
+// blocks pasting a `data:` image URL directly into the doc.
+import { Image as TiptapImage } from "@tiptap/extension-image"
 // A10-C-LIST-ENTER-FIX1. Used ONLY by `ListEnterMarkReset` below to detect,
 // via public ProseMirror APIs, that a genuine native list-item split just
 // occurred, so this import must stay decoupled from `CleanEnterOnReturn`.
@@ -33,10 +40,12 @@ import {
   Heading2,
   Heading3,
   Highlighter,
+  ImagePlus,
   Italic,
   Link as LinkIcon,
   List,
   ListOrdered,
+  Loader2,
   Minus,
   Pilcrow,
   Quote,
@@ -51,12 +60,20 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { uploadArticleContentImage } from "./content-image-actions"
 
 type Props = {
   value: string
   onChange: (html: string) => void
   ariaLabel?: string
   minHeightClass?: string
+  // A10-F. The Article's real database id, required to upload inline
+  // content images (they're stored under `articles/{articleId}/content/`
+  // — see content-image-actions.ts). `undefined`/`null` on the "new
+  // article" create form, where no id exists yet — the insert-image button
+  // is disabled in that case (see the `canInsertImage` check below) rather
+  // than silently failing after an upload attempt.
+  articleId?: string | null
 }
 
 /**
@@ -637,10 +654,17 @@ const Youtube = TiptapNode.create({
   },
 })
 
-export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: Props) {
+export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass, articleId }: Props) {
   const [mode, setMode] = React.useState<"visual" | "source">("visual")
   const [sourceDraft, setSourceDraft] = React.useState(value)
   const [notice, setNotice] = React.useState<string | null>(null)
+  // A10-F. `uploading` disables the toolbar button + hidden input while a
+  // request is in flight so a second click can't fire a concurrent upload;
+  // `fileInputRef` is the hidden native file picker the toolbar button
+  // proxies to (no custom drag-and-drop / paste handling in V1).
+  const [uploading, setUploading] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const canInsertImage = Boolean(articleId)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -684,6 +708,8 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
       // A10-E. Minimal custom YouTube block node — see its own doc comment
       // above for why this is NOT a generic iframe node.
       Youtube,
+      // A10-F. Stock Image node — see its own doc comment above.
+      TiptapImage.configure({ allowBase64: false, HTMLAttributes: {} }),
       // A10-C-FIX4. Must stay LAST so its Enter binding is tried before
       // StarterKit's list/blockquote/paragraph Enter bindings (see the
       // extension's own doc comment above for why registration order
@@ -813,6 +839,44 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
     }
     setNotice(null)
     editor.chain().focus().insertContent({ type: "youtube", attrs: { videoId } }).run()
+  }
+
+  // A10-F. Opens the hidden native file picker. Requires a saved Article id
+  // (`canInsertImage`) — the button itself is disabled otherwise, but this
+  // guard covers a stale/racing click too. The actual upload happens in
+  // `handleFileSelected` once the browser reports a chosen file.
+  function insertImage() {
+    if (!editor || !canInsertImage) return
+    fileInputRef.current?.click()
+  }
+
+  // A10-F. Uploads the chosen file via the Server Action and, on success,
+  // inserts the returned trusted Storage URL as an `<img>` node. This is a
+  // UX guard only — every field (size/MIME/origin/namespace) is
+  // INDEPENDENTLY re-validated server-side (content-image-actions.ts +
+  // lib/articles/sanitize.ts), which is the actual security boundary.
+  async function handleFileSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file || !editor || !articleId) return
+
+    setUploading(true)
+    setNotice(null)
+    try {
+      const form = new FormData()
+      form.set("file", file)
+      const result = await uploadArticleContentImage(articleId, form)
+      if (!result.ok) {
+        setNotice(result.error)
+        return
+      }
+      const alt = window.prompt("請輸入圖片替代文字（描述圖片內容，供視障使用者與 SEO 使用）", "") ?? ""
+      editor.chain().focus().setImage({ src: result.url, alt }).run()
+    } catch {
+      setNotice("圖片上傳失敗，請確認網路連線後再試一次。")
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -980,6 +1044,17 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
             <TB title="插入 YouTube" onClick={insertYoutube}>
               <YoutubeIcon className="size-4" />
             </TB>
+            {/* Inline image (A10-F). Disabled on the "new article" create
+                form (no articleId yet — see canInsertImage above) and while
+                an upload is in flight, so a second click can't fire a
+                concurrent upload. */}
+            <TB
+              title={canInsertImage ? "插入圖片" : "請先儲存文章後再插入圖片"}
+              disabled={!canInsertImage || uploading}
+              onClick={insertImage}
+            >
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+            </TB>
             <Divider />
             {/* Align */}
             <TB title="靠左對齊" active={state?.isLeft} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
@@ -1098,6 +1173,18 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass }: P
           </div>
         )}
       </div>
+
+      {/* A10-F. Hidden native file picker the toolbar button proxies to via
+          fileInputRef; never rendered visibly. `accept` is a UX hint only —
+          the Server Action independently re-validates the real MIME type
+          server-side. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
 
       {mode === "visual" ? (
         <EditorContent editor={editor} className="px-3 py-2" />

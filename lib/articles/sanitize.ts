@@ -75,6 +75,22 @@ import sanitizeHtml from "sanitize-html"
  * `exclusiveFilter` below, never passed through with partial/blanked
  * attributes.
  *
+ * A10-F adds Inline Images V1: a SINGLE canonical `<img src alt>` shape —
+ * NOT "any HTTPS image" and NOT "any Supabase Storage image". `src` must be
+ * this project's OWN `article-images` Storage public-object URL AND must
+ * fall under the Article's inline-content namespace
+ * (`articles/{id}/content/{filename}`) — see `extractTrustedArticleImageSrc`
+ * below, which is the actual security boundary (mirroring the A10-E
+ * `extractYoutubeVideoIdFromEmbedSrc` pattern: independently re-validate,
+ * never trust the incoming markup). `alt` is passed through as plain text
+ * (attribute values are not interpreted as markup) but is otherwise
+ * unvalidated — any string, including empty, survives; the Admin upload
+ * flow enforces non-empty alt before it ever reaches this sanitizer. Cover
+ * images, other Articles' content namespaces, Case Study images, and any
+ * external/`data:`/`blob:` URL are all rejected — see
+ * `exclusiveFilter` below, which drops the whole `img` tag rather than
+ * leaving a partially-stripped one behind.
+ *
  * Do NOT broaden this allowlist without updating both the Admin editor
  * toolbar and this comment in the same change.
  */
@@ -118,6 +134,12 @@ export const ARTICLE_ALLOWED_TAGS = [
   // transform and `exclusiveFilter` for the actual security boundary; this
   // tag entry alone does not widen the contract to arbitrary iframes.
   "iframe",
+  // A10-F — the ONLY img shape this allowlist permits is a trusted
+  // `article-images` Storage URL under this Article's own content
+  // namespace, rebuilt by `transformTags.img` below. See that transform and
+  // `exclusiveFilter` for the actual security boundary; this tag entry
+  // alone does not widen the contract to arbitrary images.
+  "img",
 ]
 
 // Attribute allowlist for A10-B.
@@ -152,6 +174,11 @@ export const ARTICLE_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttribute
   // surviving iframe, so listing them here does not let an attacker pass
   // arbitrary values through — it only lets our own rebuilt values survive.
   iframe: ["src", "title", "class", "allowfullscreen"],
+  // A10-F — ONLY src + alt. No title/class/width/height/style/data-*.
+  // `transformTags.img` below REBUILDS these from scratch for every
+  // surviving img, so listing them here does not let an attacker pass
+  // arbitrary values through — it only lets our own rebuilt values survive.
+  img: ["src", "alt"],
 }
 
 /**
@@ -191,6 +218,67 @@ function extractYoutubeVideoIdFromEmbedSrc(rawSrc: string): string | null {
   const videoId = url.pathname.slice("/embed/".length).split("/")[0]
   if (!videoId || !YOUTUBE_VIDEO_ID_PATTERN.test(videoId)) return null
   return videoId
+}
+
+/**
+ * A10-F — the trusted origin for this project's own `article-images`
+ * Storage public objects, derived from the same `NEXT_PUBLIC_SUPABASE_URL`
+ * the rest of the app already uses to talk to Supabase (never a
+ * hardcoded project-specific hostname, so this stays portable). Computed
+ * once at module load; `null` if the env var is missing/malformed, which
+ * makes `extractTrustedArticleImageSrc` fail closed (reject every image)
+ * instead of silently trusting nothing-in-particular.
+ */
+const TRUSTED_STORAGE_ORIGIN: string | null = (() => {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  try {
+    return new URL(base).origin
+  } catch {
+    return null
+  }
+})()
+
+/** Article inline-content namespace: `articles/{id}/content/{filename}`. */
+const ARTICLE_CONTENT_IMAGE_PATH_PATTERN =
+  /^\/storage\/v1\/object\/public\/article-images\/articles\/[^/]+\/content\/[^/]+$/
+
+/**
+ * Validates an incoming img `src` and, if and only if it is EXACTLY a
+ * trusted `article-images` Storage public-object URL under the Article
+ * inline-content namespace, returns that normalized, validated URL.
+ * Returns `null` for anything else — including non-https protocols
+ * (`data:`, `blob:`, `javascript:`, etc.), any other origin (an unrelated
+ * external host, or even a look-alike path on a different origin), the
+ * `case-images` bucket, the Article's own COVER image path
+ * (`articles/{id}/cover-*`, not `.../content/...`), any other bucket, and
+ * any path that doesn't match the exact `articles/{id}/content/{file}`
+ * shape.
+ *
+ * This is the ACTUAL security boundary for A10-F img support — NOT any
+ * `allowedIframeHostnames`-style hostname allowlist option (sanitize-html
+ * has no img-specific equivalent), mirroring the A10-E
+ * `extractYoutubeVideoIdFromEmbedSrc` pattern: independently re-derive and
+ * validate from the raw `src`, never trust the incoming markup.
+ *
+ * Unlike YouTube (where the video ID is the trusted unit and the whole URL
+ * is reconstructed from it), the trusted unit here is the ALREADY-VALIDATED
+ * Storage public URL itself — once it passes every check, it is returned
+ * UNCHANGED rather than rebuilt, so equivalent Storage URLs are never
+ * needlessly rewritten (avoiding Save → Reload diffs).
+ */
+function extractTrustedArticleImageSrc(rawSrc: string): string | null {
+  if (!TRUSTED_STORAGE_ORIGIN) return null
+  let url: URL
+  try {
+    url = new URL(rawSrc)
+  } catch {
+    return null
+  }
+  if (url.protocol !== "https:") return null
+  if (url.origin !== TRUSTED_STORAGE_ORIGIN) return null
+  if (!ARTICLE_CONTENT_IMAGE_PATH_PATTERN.test(url.pathname)) return null
+  return url.toString()
 }
 
 /**
@@ -321,12 +409,32 @@ export function sanitizeArticleContentHtml(dirty: string | null | undefined): st
           : {}
         return { tagName, attribs: out }
       },
+      // A10-F — REBUILD, do not pass through. For every incoming `img`,
+      // independently re-derive a trusted `article-images` Storage URL from
+      // `src` and, if valid, keep ONLY that validated `src` plus the
+      // incoming `alt` (plain text, not markup) — every other attribute
+      // (title/class/width/height/style/data-*/on*) is dropped regardless
+      // of what the incoming markup carried. If no trusted URL can be
+      // derived, drop `src` entirely, which never satisfies the
+      // `exclusiveFilter` check below — so the tag (and its inbound
+      // attributes) is dropped entirely, not left behind as an empty/broken
+      // `<img>`.
+      img: (tagName, attribs) => {
+        const trustedSrc = extractTrustedArticleImageSrc(attribs.src ?? "")
+        const out: sanitizeHtml.IFrame["attribs"] = trustedSrc ? { src: trustedSrc, alt: attribs.alt ?? "" } : {}
+        return { tagName, attribs: out }
+      },
     },
     // A10-E — final removal pass for any iframe that didn't survive
     // `transformTags.iframe` as the exact canonical YouTube shape (invalid
     // host/protocol/path/video ID). This fully excludes the tag rather than
     // leaving an empty or partially-stripped iframe behind.
-    exclusiveFilter: (frame) => frame.tag === "iframe" && frame.attribs.class !== "youtube-embed",
+    // A10-F — same removal pass for any img that didn't survive
+    // `transformTags.img` with a trusted `src` (invalid origin/bucket/
+    // namespace, or no `src` at all).
+    exclusiveFilter: (frame) =>
+      (frame.tag === "iframe" && frame.attribs.class !== "youtube-embed") ||
+      (frame.tag === "img" && !frame.attribs.src),
     // Defense-in-depth on top of the `transformTags.iframe` rebuild above —
     // NOT the primary security boundary (see that function's doc comment).
     allowedIframeHostnames: ["www.youtube-nocookie.com"],

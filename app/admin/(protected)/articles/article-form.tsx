@@ -344,7 +344,12 @@ export function ArticleForm({
           <CardTitle className="text-base">文章內容</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5">
-          <RichTextEditor value={contentHtml} onChange={setContentHtml} ariaLabel="文章內容編輯器" />
+              <RichTextEditor
+                value={contentHtml}
+                onChange={setContentHtml}
+                ariaLabel="文章內容編輯器"
+                articleId={initialValues?.id ?? null}
+              />
           <p className="text-xs text-muted-foreground">文章內容目前為選填，儲存後尚不會於公開網站顯示（此功能將於後續版本開放）。</p>
         </CardContent>
       </Card>
