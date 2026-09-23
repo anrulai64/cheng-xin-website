@@ -451,12 +451,11 @@
  * A10-F: Inline Content Image V1. The sanitizer only ever persists a plain
  * `<img src alt>` pointing at the app's own Supabase Storage public URL (see
  * lib/articles/sanitize.ts) — no width/height/style attributes survive, so
- * intrinsic sizing is controlled entirely here: full-width, auto height,
- * rounded corners to match the rest of the content's soft edges.
+ * intrinsic sizing is controlled entirely here: capped width, auto height,
+ * and natural aspect ratio without additional presentation styling.
  */
 .article-content img {
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: var(--radius);
 }

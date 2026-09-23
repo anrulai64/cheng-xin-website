@@ -860,6 +860,14 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass, art
     event.target.value = ""
     if (!file || !editor || !articleId) return
 
+    const promptedAlt = window.prompt("請輸入圖片替代文字（描述圖片內容，供視障使用者與 SEO 使用）", "")
+    if (promptedAlt === null) return
+    const alt = promptedAlt.trim()
+    if (alt === "") {
+      setNotice("請輸入圖片替代文字後再上傳。")
+      return
+    }
+
     setUploading(true)
     setNotice(null)
     try {
@@ -870,7 +878,6 @@ export function RichTextEditor({ value, onChange, ariaLabel, minHeightClass, art
         setNotice(result.error)
         return
       }
-      const alt = window.prompt("請輸入圖片替代文字（描述圖片內容，供視障使用者與 SEO 使用）", "") ?? ""
       editor.chain().focus().setImage({ src: result.url, alt }).run()
     } catch {
       setNotice("圖片上傳失敗，請確認網路連線後再試一次。")
