@@ -149,7 +149,6 @@ export function ArticleForm({
       }
 
       router.push(LIST_PATH)
-      router.refresh()
     } catch (err) {
       console.error("[v0] article form submit failed", err)
       setError("發生非預期的錯誤，請稍後再試。")

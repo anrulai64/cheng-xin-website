@@ -173,12 +173,21 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
   }
   if ("error" in fields) return { ok: false, error: fields.error }
 
-  // Server-side category existence check — never trust the browser <select>.
-  const { data: categoryMatch, error: categoryError } = await supabase
-    .from("article_categories")
-    .select("id")
-    .eq("id", fields.category_id)
-    .limit(1)
+  // P0-B — category existence and slug uniqueness are independent checks
+  // (neither depends on the other's result), so they run concurrently. The
+  // settled results are then evaluated in the SAME logical order as before
+  // (category error first, then slug error) — Promise completion order has
+  // no effect on which error is returned.
+  const [
+    { data: categoryMatch, error: categoryError },
+    { data: slugMatches, error: slugCheckError },
+  ] = await Promise.all([
+    // Server-side category existence check — never trust the browser <select>.
+    supabase.from("article_categories").select("id").eq("id", fields.category_id).limit(1),
+    // Duplicate-slug pre-check (the DB UNIQUE constraint is the final guard).
+    supabase.from("articles").select("id").eq("slug", fields.slug).limit(1),
+  ])
+
   if (categoryError) {
     return { ok: false, error: "建立文章失敗，請稍後再試。" }
   }
@@ -186,12 +195,6 @@ export async function createArticle(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "文章分類不存在，請重新選擇。" }
   }
 
-  // Duplicate-slug pre-check (the DB UNIQUE constraint is the final guard).
-  const { data: slugMatches, error: slugCheckError } = await supabase
-    .from("articles")
-    .select("id")
-    .eq("slug", fields.slug)
-    .limit(1)
   if (slugCheckError) {
     return { ok: false, error: "建立文章失敗，請稍後再試。" }
   }
@@ -243,13 +246,26 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
   }
   if ("error" in fields) return { ok: false, error: fields.error }
 
-  // Confirm the Article still exists before validating further — avoids
-  // treating a zero-row UPDATE later as a silent success.
-  const { data: existing, error: existingError } = await supabase
-    .from("articles")
-    .select("id")
-    .eq("id", id)
-    .limit(1)
+  // P0-B — Article existence, category existence, and slug uniqueness are
+  // independent checks (none depends on another's result), so they run
+  // concurrently. The settled results are then evaluated in the SAME logical
+  // priority as before (existence -> category -> slug) — Promise completion
+  // order has no effect on which error is returned.
+  const [
+    { data: existing, error: existingError },
+    { data: categoryMatch, error: categoryError },
+    { data: slugMatches, error: slugCheckError },
+  ] = await Promise.all([
+    // Confirm the Article still exists before validating further — avoids
+    // treating a zero-row UPDATE later as a silent success.
+    supabase.from("articles").select("id").eq("id", id).limit(1),
+    // Server-side category existence check — never trust the browser <select>.
+    supabase.from("article_categories").select("id").eq("id", fields.category_id).limit(1),
+    // Duplicate-slug pre-check, excluding this Article's own row so an unchanged
+    // slug can always be saved (the DB UNIQUE constraint is the final guard).
+    supabase.from("articles").select("id").eq("slug", fields.slug).neq("id", id).limit(1),
+  ])
+
   if (existingError) {
     return { ok: false, error: "更新文章失敗，請稍後再試。" }
   }
@@ -257,27 +273,13 @@ export async function updateArticle(id: string, formData: FormData): Promise<Act
     return { ok: false, error: "文章不存在或已被刪除。" }
   }
 
-  // Server-side category existence check — never trust the browser <select>.
-  const { data: categoryMatch, error: categoryError } = await supabase
-    .from("article_categories")
-    .select("id")
-    .eq("id", fields.category_id)
-    .limit(1)
   if (categoryError) {
-    return { ok: false, error: "更新文章失敗，請��後再試。" }
+    return { ok: false, error: "更新文章失敗，請稍後再試。" }
   }
   if (!categoryMatch || categoryMatch.length === 0) {
     return { ok: false, error: "文章分類不存在，請重新選擇。" }
   }
 
-  // Duplicate-slug pre-check, excluding this Article's own row so an unchanged
-  // slug can always be saved (the DB UNIQUE constraint is the final guard).
-  const { data: slugMatches, error: slugCheckError } = await supabase
-    .from("articles")
-    .select("id")
-    .eq("slug", fields.slug)
-    .neq("id", id)
-    .limit(1)
   if (slugCheckError) {
     return { ok: false, error: "更新文章失敗，請稍後再試。" }
   }

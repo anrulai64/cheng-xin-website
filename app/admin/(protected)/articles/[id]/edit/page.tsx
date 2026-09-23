@@ -22,23 +22,32 @@ export default async function EditArticlePage({
   // A malformed (non-UUID) id causes Postgres to return an error here, which
   // is treated the same as "not found" — matching the Article/Case Category
   // edit convention.
-  const { data: article, error: articleError } = await supabase
-    .from("articles")
-    .select(
-      "id, title, category_id, slug, status, publish_date, start_date, end_date, excerpt, cover_image_url, cover_alt, seo_title, seo_keywords, seo_description, content_html, content_updated_date",
-    )
-    .eq("id", id)
-    .single()
+  //
+  // P0-C — these two queries are independent (neither depends on the other's
+  // result), so they run concurrently. The Categories query may complete
+  // even when the Article does not exist — that is fine since it is
+  // read-only and has no side effects. Article-existence precedence (checked
+  // immediately below) is preserved exactly as before.
+  const [{ data: article, error: articleError }, { data: categoryRows, error: categoriesError }] = await Promise.all(
+    [
+      supabase
+        .from("articles")
+        .select(
+          "id, title, category_id, slug, status, publish_date, start_date, end_date, excerpt, cover_image_url, cover_alt, seo_title, seo_keywords, seo_description, content_html, content_updated_date",
+        )
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("article_categories")
+        .select("id, name, sort_order")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ],
+  )
 
   if (articleError || !article) {
     notFound()
   }
-
-  const { data: categoryRows, error: categoriesError } = await supabase
-    .from("article_categories")
-    .select("id, name, sort_order")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true })
 
   const categories: ArticleCategoryOption[] = (categoryRows ?? []).map((c) => ({ id: c.id, name: c.name }))
 
